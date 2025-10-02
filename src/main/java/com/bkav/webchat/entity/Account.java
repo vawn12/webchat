@@ -16,10 +16,10 @@ public class Account {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY) // SERIAL
     @Column(name = "account_id")
-    private Long accountId;
+    private Integer accountId;
 
     @Column(name = "username", nullable = false, unique = true, length = 50)
-    private String username;
+    private Long username;
 
     @Column(name = "password_hash", nullable = false, length = 255)
     private String passwordHash;

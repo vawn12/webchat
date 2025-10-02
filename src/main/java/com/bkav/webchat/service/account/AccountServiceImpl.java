@@ -50,4 +50,10 @@ public class AccountServiceImpl implements AccountService {
                 .map(this::convertToDTO)
                 .orElse(null);
     }
+    @Override
+    public AccountDTO findAccountByEmail(String email){
+        return accountRepository.findByEmail(email)
+                .map(this::convertToDTO)
+                .orElse(null);
+    }
 }

@@ -7,11 +7,12 @@ import com.bkav.webchat.repository.AccountRepository;
 import com.bkav.webchat.repository.ForgotPasswordRepository;
 import jakarta.transaction.Transactional;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.stereotype.Service;
 
 import java.util.List;
 import java.util.Optional;
 import java.util.stream.Collectors;
-
+@Service
 public class ForgotService {
     @Autowired
     private ForgotPasswordRepository forgotPasswordRepository;
@@ -22,18 +23,18 @@ public class ForgotService {
         return ForgotPasswordDTO.builder()
                 .id(entity.getId())
                 .token(entity.getToken())
-                .account(entity.getAccount().getAccountId())
+                .account(entity.getAccount().getUsername())
                 .expiryDate(entity.getExpiryDate())
                 .build();
     }
 
     public ForgotPassword ToEntity(ForgotPasswordDTO dto) {
-        Account account = accountRepository.findById(dto.getAccountId())
-                .orElseThrow(() -> new RuntimeException("Account not found with ID: " + dto.getAccountId()));
+        Account account = accountRepository.findById(dto.getId())
+                .orElseThrow(() -> new RuntimeException("Account not found with ID: " + dto.getId()));
 
         return ForgotPassword.builder()
                 .id(dto.getId())
-                .otp(dto.getOtp())
+                .token(dto.getToken())
                 .account(account)
                 .expiryDate(dto.getExpiryDate())
                 .build();
@@ -67,10 +68,10 @@ public class ForgotService {
                 .orElseThrow(() -> new RuntimeException("ForgotPassword not found with ID: " + id));
 
         // Cập nhật dữ liệu
-        existing.setOtp(dto.getOtp());
+        existing.setToken(dto.getToken());
         existing.setExpiryDate(dto.getExpiryDate());
-        existing.setAccount(accountRepository.findById(dto.getAccountId())
-                .orElseThrow(() -> new RuntimeException("Account not found with ID: " + dto.getAccountId())));
+        existing.setAccount(accountRepository.findById(dto.getId())
+                .orElseThrow(() -> new RuntimeException("Account not found with ID: " + dto.getId())));
 
         ForgotPassword updated = forgotPasswordRepository.save(existing);
         return toDTO(updated);

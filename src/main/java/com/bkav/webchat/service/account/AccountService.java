@@ -6,5 +6,5 @@ import com.bkav.webchat.entity.Account;
 public interface AccountService {
     AccountDTO register(AccountDTO dto, String rawPassword);
     AccountDTO findByUsername(String username);
-
+    AccountDTO findAccountByEmail(String email);
 }

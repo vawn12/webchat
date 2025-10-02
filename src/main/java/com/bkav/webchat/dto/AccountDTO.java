@@ -14,8 +14,8 @@ import java.time.LocalDateTime;
 @Builder
 public class AccountDTO {
 
-    private Long accountId;
-    private String username;
+    private Integer accountId;
+    private Long username;
     private String email;
     private String displayName;
     private String avatarUrl;
