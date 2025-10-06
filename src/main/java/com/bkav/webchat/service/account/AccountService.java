@@ -7,4 +7,6 @@ public interface AccountService {
     AccountDTO register(AccountDTO dto, String rawPassword);
     AccountDTO findByUsername(String username);
     AccountDTO findAccountByEmail(String email);
+    AccountDTO login(String username, String rawPassword);
+    AccountDTO save(AccountDTO dto);
 }

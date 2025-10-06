@@ -15,6 +15,7 @@ import java.time.LocalDateTime;
 public class AccountDTO {
 
     private Integer accountId;
+    private String password;
     private Long username;
     private String email;
     private String displayName;

@@ -27,19 +27,19 @@ public class AccountServiceImpl implements AccountService {
     }
 
     // Chuyển từ AccountDTO (DTO) sang Account (Entity)
-    public Account convertToEntity(AccountDTO creationDTO, String rawPassword) {
+    public Account convertToEntity(AccountDTO dto) {
         // password sẽ được hash ở đây trước khi lưu vào entity
         return Account.builder()
-                .username(creationDTO.getUsername())
-                .email(creationDTO.getEmail())
-                .displayName(creationDTO.getDisplayName())
+                .username(dto.getUsername())
+                .email(dto.getEmail())
+                .displayName(dto.getDisplayName())
                 .status(Account_status.OFFLINE)
                 .build();
 
     }
     @Override
     public AccountDTO register(AccountDTO dto, String rawPassword) {
-        Account entity = convertToEntity(dto, rawPassword);
+        Account entity = convertToEntity(dto);
         Account saved = accountRepository.save(entity);
         return convertToDTO(saved);
     }
@@ -55,5 +55,23 @@ public class AccountServiceImpl implements AccountService {
         return accountRepository.findByEmail(email)
                 .map(this::convertToDTO)
                 .orElse(null);
+    }
+    @Override
+    public AccountDTO login(String username, String rawPassword) {
+        return accountRepository.findByUsername(username)
+                .filter(acc -> passwordEncoder.matches(rawPassword, acc.getPasswordHash()))
+                .map(acc -> {
+                    // update trạng thái online nếu muốn
+                    acc.setStatus(Account_status.ONLINE);
+                    accountRepository.save(acc);
+                    return convertToDTO(acc);
+                })
+                .orElse(null);
+    }
+    @Override
+    public AccountDTO save(AccountDTO dto){
+        Account entity = convertToEntity(dto);
+        Account saved = accountRepository.save(entity);
+        return convertToDTO(saved);
     }
 }
