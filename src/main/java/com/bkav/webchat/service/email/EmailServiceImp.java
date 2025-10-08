@@ -30,7 +30,7 @@ public class EmailServiceImp implements EmailService {
             helper.setTo(to);
             helper.setSubject(subject);
             helper.setText(content, true);
-            helper.addInline("logo", new ClassPathResource("static/customer-static/images/logo/logo.png"));
+            helper.addInline("logo", new ClassPathResource("static/customer-static/images/bkav.png"));
         } catch (Exception e) {
             e.printStackTrace();
         }

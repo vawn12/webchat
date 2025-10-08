@@ -39,7 +39,18 @@ public class AccountServiceImpl implements AccountService {
     }
     @Override
     public AccountDTO register(AccountDTO dto, String rawPassword) {
+        if (dto == null || rawPassword == null || rawPassword.isEmpty()) {
+            throw new IllegalArgumentException("Account info or password is missing");
+        }
+        // Tạo encoder
+        BCryptPasswordEncoder encoder = new BCryptPasswordEncoder();
+        // Convert DTO → Entity
         Account entity = convertToEntity(dto);
+        // mật khẩu được mã hóa
+        entity.setPasswordHash(encoder.encode(rawPassword));
+        if (entity.getStatus() == null) {
+            entity.setStatus(Account_status.OFFLINE);
+        }
         Account saved = accountRepository.save(entity);
         return convertToDTO(saved);
     }

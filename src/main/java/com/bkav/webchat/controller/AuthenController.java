@@ -75,7 +75,7 @@ public class AuthenController {
     }
 
     @GetMapping("/forgot")
-    public String forgot(Model model ) {return "common/verify-email";}
+    public String forgot(Model model ) {return "common/forgot";}
 
     @PostMapping("/forgot")
     public String sendOtp(@RequestParam String email, HttpSession session, RedirectAttributes redirect) {
@@ -124,7 +124,7 @@ public class AuthenController {
             return "common/verify-otp";
         } else {
             redirectAttributes.addFlashAttribute("error", "Invalid email");
-            return "redirect:/forgotpassword";
+            return "redirect:/forgot";
         }
     }
     @GetMapping("/verifytoken")

@@ -15,17 +15,20 @@ public class AccountDetailService implements UserDetailsService {
     @Autowired
     private AccountRepository accountRepository;
 
+
     @Override
     public UserDetails loadUserByUsername(String username) throws UsernameNotFoundException {
-        Account account = accountRepository.findByEmail(username).orElse(null);
-        if (account == null) {
-            System.out.println("AccountDetailService.loadUserByUsername() - account is null: " + username);
-            throw new UsernameNotFoundException("User not found with username: " + username);
-        }
+        Account account = accountRepository.findByEmail(username)
+                .orElseThrow(() -> new UsernameNotFoundException("User not found: " + username));
 
-        return User.withUsername(account.getEmail()).
-                password(account.getPasswordHash()).
-                accountLocked(account.getStatus().name().equals(Account_status.BANNER.name()))
+        boolean locked = account.getStatus() == Account_status.BANNER;
+
+        return User.builder()
+                .username(account.getEmail())
+                .password(account.getPasswordHash())
+                .accountLocked(locked)
+                .roles("USER")  // mặc định tất cả user đều là ROLE_USER
                 .build();
     }
+
 }
