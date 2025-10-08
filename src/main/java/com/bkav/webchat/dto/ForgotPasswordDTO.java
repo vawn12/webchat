@@ -13,7 +13,7 @@ import java.util.Date;
 @Builder
 public class ForgotPasswordDTO {
     private int id;
-    private Long account;
-    private int token;
+    private String account;
+    private  String token;
     private Date expiryDate;
 }

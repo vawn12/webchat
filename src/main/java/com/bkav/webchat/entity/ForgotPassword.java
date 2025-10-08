@@ -23,7 +23,7 @@ public class ForgotPassword {
     private Account account;
 
     @Column(nullable = false, unique = true, length = 255)
-    private Integer token;
+    private String token;
 
     @Column(name = "Expires_At", nullable = false)
     private Date expiryDate;

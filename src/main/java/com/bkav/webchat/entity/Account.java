@@ -19,7 +19,7 @@ public class Account {
     private Integer accountId;
 
     @Column(name = "username", nullable = false, unique = true, length = 50)
-    private Long username;
+    private String username;
 
     @Column(name = "password_hash", nullable = false, length = 255)
     private String passwordHash;

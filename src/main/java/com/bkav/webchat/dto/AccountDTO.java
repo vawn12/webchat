@@ -16,7 +16,7 @@ public class AccountDTO {
 
     private Integer accountId;
     private String password;
-    private Long username;
+    private String username;
     private String email;
     private String displayName;
     private String avatarUrl;

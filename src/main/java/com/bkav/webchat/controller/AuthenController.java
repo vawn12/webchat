@@ -40,13 +40,14 @@ public class AuthenController {
     private EmailService emailService;
     @Autowired
     private VerifyTokenService verifytokenService;
-    @Value("${app.base-url}")
-    private String baseUrl;
+
     @Autowired
     private VerifyTokenService verifyTokenService;
     @Autowired
     private AccountDetailService accountDetailService;
 
+    @Value("${app.base-url}")
+    private String baseUrl;
     @GetMapping("/login")
     public String loginPage(Model model) {
         return "common/login";
@@ -85,7 +86,7 @@ public class AuthenController {
         }
 
         List<Integer> otpDigits = generateOtpDigits();
-        int otp = convertDigitsToInteger(otpDigits);
+        String otp = convertDigitsToString(otpDigits);
 
         ForgotPasswordDTO forgot = ForgotPasswordDTO.builder()
                 .id(account.getAccountId())
@@ -115,7 +116,7 @@ public class AuthenController {
                 }
             }
             List<Integer> otpDigits = generateOtpDigits();
-            int otp = convertDigitsToInteger(otpDigits);
+            String otp = convertDigitsToString(otpDigits);
             forgotPasswordDTO = ForgotPasswordDTO.builder().id(account.getAccountId()).token(otp).expiryDate(new Date(System.currentTimeMillis() + 5 * 60 * 1000)).build();
             forgotPasswordService.createForgotPassword(forgotPasswordDTO);
             String content = emailService.builEmailContentForResetPassword(otpDigits);
@@ -206,7 +207,7 @@ public class AuthenController {
         }
 
         AccountDTO dto = AccountDTO.builder()
-                .username(Long.valueOf(verifyToken.getEmail().split("@")[0]))
+                .username(verifyToken.getEmail().split("@")[0])
                 .email(verifyToken.getEmail())
                 .displayName(verifyToken.getFullName())
                 .status(Account_status.OFFLINE)
@@ -218,7 +219,7 @@ public class AuthenController {
         return "redirect:/login";
     }
     @PostMapping("/verify-otp")
-    public String verifyOtp(@RequestParam int otp, HttpSession session, RedirectAttributes redirect) {
+    public String verifyOtp(@RequestParam String otp, HttpSession session, RedirectAttributes redirect) {
         String email = (String) session.getAttribute("resetEmail");
         if (email == null) {
             redirect.addFlashAttribute("error", "Session expired");
@@ -227,7 +228,7 @@ public class AuthenController {
 
         AccountDTO account = accountService.findAccountByEmail(email);
         ForgotPasswordDTO forgot = forgotPasswordService.findForgotPasswordByAccountId(account.getAccountId());
-        if (forgot == null || forgot.getToken() != otp) {
+        if (forgot == null || !forgot.getToken().equals(otp)) {
             redirect.addFlashAttribute("error", "Invalid OTP");
             return "redirect:/forgot";
         }
@@ -235,7 +236,6 @@ public class AuthenController {
             redirect.addFlashAttribute("error", "OTP expired");
             return "redirect:/forgot";
         }
-
         session.setAttribute("otpVerified", true);
         return "common/reset-password";
     }
@@ -265,6 +265,13 @@ public class AuthenController {
             sb.append(digit);
         }
         return Integer.parseInt(sb.toString());
+    }
+    public String convertDigitsToString(List<Integer> otpDigits) {
+        StringBuilder sb = new StringBuilder();
+        for (Integer digit : otpDigits) {
+            sb.append(digit);
+        }
+        return sb.toString();
     }
     public List<Integer> generateOtpDigits() {
         Random rand = new Random();

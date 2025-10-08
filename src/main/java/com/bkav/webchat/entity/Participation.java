@@ -28,7 +28,7 @@ public class Participation {
     @JoinColumn(name = "account_id", nullable = false,
             foreignKey = @ForeignKey(name = "fk_participants_account"))
     private Account account;
-
+    @Enumerated(EnumType.STRING)
     @Column(name = "role", length = 20)
     private ParticipantRole role ; // member, admin, owner
 
