@@ -9,4 +9,6 @@ public interface AccountService {
     AccountDTO findAccountByEmail(String email);
     AccountDTO login(String username, String rawPassword);
     AccountDTO save(AccountDTO dto);
+    AccountDTO convertToDTO(Account account);
+    Account convertToEntity(AccountDTO dto);
 }

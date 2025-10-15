@@ -5,7 +5,6 @@ import com.bkav.webchat.dto.AccountDTO;
 import com.bkav.webchat.entity.Account;
 import com.bkav.webchat.repository.AccountRepository;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.stereotype.Service;
 
@@ -39,7 +38,6 @@ public class AccountServiceImpl implements AccountService {
                 .displayName(dto.getDisplayName())
                 .status(Account_status.OFFLINE)
                 .build();
-
     }
     @Override
     public AccountDTO register(AccountDTO dto, String rawPassword) {
@@ -75,7 +73,7 @@ public class AccountServiceImpl implements AccountService {
     public AccountDTO login(String username, String password) {
         String cacheKey = "account:" + username;
 
-        // 1️⃣ Không kiểm tra password trong cache
+        // Không kiểm tra password trong cache
         AccountDTO cachedAccount = (AccountDTO) redisService.get(cacheKey);
         if (cachedAccount != null) {
             // Chỉ kiểm tra nếu Redis cache vẫn hợp lệ
@@ -88,13 +86,13 @@ public class AccountServiceImpl implements AccountService {
             }
         }
 
-        // 2️⃣ Nếu không có cache → kiểm tra trong DB
+        // Nếu không có cache → kiểm tra trong DB
         Account account = accountRepository.findByUsername(username).orElse(null);
         if (account == null || !encoder.matches(password, account.getPasswordHash())) {
             return null;
         }
 
-        // 3️⃣ Chuyển sang DTO (không chứa password)
+        // Chuyển sang DTO (không chứa password)
         AccountDTO dto = AccountDTO.builder()
                 .accountId(account.getAccountId())
                 .username(account.getUsername())
@@ -103,7 +101,7 @@ public class AccountServiceImpl implements AccountService {
                 .status(account.getStatus())
                 .build();
 
-        // 4️⃣ Lưu cache trong Redis 30 phút (chỉ thông tin, không mật khẩu)
+        // Lưu cache trong Redis 30 phút (chỉ thông tin, không mật khẩu)
         redisService.save(cacheKey, dto, 30);
 
         return dto;
