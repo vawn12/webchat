@@ -1,0 +1,14 @@
+package com.bkav.webchat.service;
+
+import com.bkav.webchat.dto.AccountDTO;
+import com.bkav.webchat.entity.Account;
+
+public interface AccountService {
+    AccountDTO register(AccountDTO dto, String rawPassword);
+    AccountDTO findByUsername(String username);
+    AccountDTO findAccountByEmail(String email);
+    AccountDTO login(String username, String rawPassword);
+    AccountDTO save(AccountDTO dto);
+    AccountDTO convertToDTO(Account account);
+    Account convertToEntity(AccountDTO dto);
+}

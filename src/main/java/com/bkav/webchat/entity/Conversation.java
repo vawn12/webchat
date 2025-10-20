@@ -15,7 +15,7 @@ public class Conversation {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY) // SERIAL
     @Column(name = "conversation_id")
-    private Long conversationId;
+    private Integer conversationId;
 
     @Column(name = "name", length = 100)
     private String name;

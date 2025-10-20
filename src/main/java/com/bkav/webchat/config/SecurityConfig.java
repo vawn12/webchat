@@ -34,7 +34,7 @@ public class SecurityConfig {
                 // Phân quyền các request
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers("/login", "/register", "/verify**", "/forgot**",
-                                "/css/**", "/js/**", "/images/**", "/webjars/**").permitAll()
+                                "/css/**", "/js/**", "/images/**", "/webjars/**" , "/chat/**").permitAll()
                         .anyRequest().authenticated()
                 )
 
@@ -45,7 +45,7 @@ public class SecurityConfig {
                         .usernameParameter("username")
                         .passwordParameter("password")
                         .failureUrl("/login?error=true")
-                        .defaultSuccessUrl("/home", true)
+                        .defaultSuccessUrl("/chat", true)
                         .permitAll()
                 )
 
