@@ -1,7 +1,7 @@
 package com.bkav.webchat.service.Impl;
 import com.bkav.webchat.cache.RedisService;
 import com.bkav.webchat.enumtype.Account_status;
-import com.bkav.webchat.dto.AccountDTO;
+import com.bkav.webchat.dto.m.AccountDTO;
 import com.bkav.webchat.entity.Account;
 import com.bkav.webchat.repository.AccountRepository;
 import com.bkav.webchat.service.AccountService;
@@ -80,7 +80,7 @@ public class AccountServiceImpl implements AccountService {
             // Chỉ kiểm tra nếu Redis cache vẫn hợp lệ
             Account account = accountRepository.findByUsername(username).orElse(null);
             if (account != null && encoder.matches(password, account.getPasswordHash())) {
-                System.out.println("🔥 Cache hit from Redis!");
+                System.out.println("Cache hit from Redis!");
                 return cachedAccount;
             } else {
                 return null;

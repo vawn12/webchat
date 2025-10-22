@@ -1,7 +1,5 @@
 package com.bkav.webchat.repository;
 
-import com.bkav.webchat.dto.ChatListDTO;
-
 
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.PersistenceContext;

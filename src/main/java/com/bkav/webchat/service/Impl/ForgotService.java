@@ -1,6 +1,6 @@
 package com.bkav.webchat.service.Impl;
 
-import com.bkav.webchat.dto.ForgotPasswordDTO;
+import com.bkav.webchat.dto.m.ForgotPasswordDTO;
 import com.bkav.webchat.entity.Account;
 import com.bkav.webchat.entity.ForgotPassword;
 import com.bkav.webchat.repository.AccountRepository;

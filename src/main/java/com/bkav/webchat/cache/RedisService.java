@@ -18,9 +18,10 @@ public class RedisService {
         return redisTemplate.opsForValue().get(key);
     }
 
-    public void delete(String key) {
-        redisTemplate.delete(key);
+    public void deleteToken(String token) {
+        redisTemplate.delete(token);
     }
+
 }
 
 

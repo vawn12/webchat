@@ -1,6 +1,6 @@
 package com.bkav.webchat.service;
 
-import com.bkav.webchat.dto.VerifyTokenDTO;
+import com.bkav.webchat.dto.m.VerifyTokenDTO;
 import com.bkav.webchat.entity.VerifyToken;
 
 public interface VerifyTokenService {

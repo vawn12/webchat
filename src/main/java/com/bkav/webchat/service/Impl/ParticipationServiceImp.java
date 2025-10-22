@@ -1,6 +1,6 @@
 package com.bkav.webchat.service.Impl;
 
-import com.bkav.webchat.dto.ParticipationDTO;
+import com.bkav.webchat.dto.m.ParticipationDTO;
 import com.bkav.webchat.entity.Participation;
 import com.bkav.webchat.service.AccountService;
 import com.bkav.webchat.service.ConversationService;

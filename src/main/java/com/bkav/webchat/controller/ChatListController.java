@@ -13,7 +13,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 
 import java.util.List;
 @Controller
-@RequestMapping("chat")
+@RequestMapping("api/chat")
 public class ChatListController {
     @Autowired
     private ChatListService chatListService;

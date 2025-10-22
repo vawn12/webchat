@@ -1,6 +1,6 @@
 package com.bkav.webchat.service.Impl;
 
-import com.bkav.webchat.dto.UserContactDTO;
+import com.bkav.webchat.dto.m.UserContactDTO;
 import com.bkav.webchat.entity.UserContact;
 import com.bkav.webchat.repository.UserContactRepository;
 import com.bkav.webchat.service.AccountService;

@@ -14,7 +14,7 @@ public class RedisConfig {
     @Bean
     public RedisConnectionFactory redisConnectionFactory() {
         // Kết nối mặc định đến localhost:6379
-        return new LettuceConnectionFactory("localhost", 8081);
+        return new LettuceConnectionFactory("localhost", 6379);
     }
 
     @Bean

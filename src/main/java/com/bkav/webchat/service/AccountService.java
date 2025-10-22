@@ -1,6 +1,6 @@
 package com.bkav.webchat.service;
 
-import com.bkav.webchat.dto.AccountDTO;
+import com.bkav.webchat.dto.m.AccountDTO;
 import com.bkav.webchat.entity.Account;
 
 public interface AccountService {

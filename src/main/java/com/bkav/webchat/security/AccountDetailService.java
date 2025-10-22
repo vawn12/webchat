@@ -27,7 +27,7 @@ public class AccountDetailService implements UserDetailsService {
                 .username(account.getEmail())
                 .password(account.getPasswordHash())
                 .accountLocked(locked)
-                .roles("USER")  // mặc định tất cả user
+                .roles("USER")
                 .build();
     }
 
