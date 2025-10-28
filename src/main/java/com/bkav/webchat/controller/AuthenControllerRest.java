@@ -17,6 +17,7 @@ import com.bkav.webchat.service.VerifyTokenService;
 import com.bkav.webchat.service.Impl.ForgotService;
 //import io.swagger.v3.oas.annotations.Operation;
 //import io.swagger.v3.oas.annotations.tags.Tag;
+import com.nimbusds.openid.connect.sdk.LogoutRequest;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
@@ -59,7 +60,14 @@ public class AuthenControllerRest {
     }
 
     @PostMapping("/logout")
-    public ResponseEntity<ApiResponse<?>> logout(@RequestHeader("Authorization") String authHeader) {
-        return authService.logout(authHeader);
+    public ResponseEntity<ApiResponse<?>> logout(@RequestBody Map<String , String > body) {
+        String refreshtoken = body.get("refreshToken");
+        return authService.logout(refreshtoken);
     }
+    @PostMapping("/refresh")
+    public ResponseEntity<ApiResponse<?>> refreshToken(@RequestBody Map<String, String> body) {
+        String refreshToken = body.get("refreshToken");
+        return authService.refresh(refreshToken);
+    }
+
 }

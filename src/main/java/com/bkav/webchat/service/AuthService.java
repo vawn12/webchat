@@ -14,4 +14,5 @@ public interface AuthService {
     ResponseEntity<ApiResponse<?>> forgotPassword(ForgotRequest request);
     ResponseEntity<ApiResponse<?>> resetPassword(ResetPasswordRequest request);
     ResponseEntity<ApiResponse<?>> logout(String authHeader);
+    ResponseEntity<ApiResponse<?>> refresh(String refreshToken);
 }

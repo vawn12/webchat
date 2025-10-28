@@ -16,25 +16,31 @@ public class JwtService {
     @Value("${jwt.secret}")
     private String secretKey;
 
-    @Value("${jwt.expiration}")
-    private long jwtExpiration; // milliseconds, ví dụ 86400000 = 1 ngày
+    @Value("${jwt.access-expiration}")
+    private long accessTokenExpiration; // 15 * 60 * 1000 = 15 phút
+
+    @Value("${jwt.refresh-expiration}")
+    private long refreshTokenExpiration;
 
     private Key getSigningKey() {
         return Keys.hmacShaKeyFor(secretKey.getBytes());
     }
 
-    public String generateToken(String username, Map<String, Object> extraClaims) {
-        return Jwts.builder()
-                .setClaims(extraClaims)
-                .setSubject(username)
-                .setIssuedAt(new Date(System.currentTimeMillis()))
-                .setExpiration(new Date(System.currentTimeMillis() + jwtExpiration))
-                .signWith(getSigningKey(), SignatureAlgorithm.HS256)
-                .compact();
+    public String generateAccessToken(String username) {
+        return buildToken(username, accessTokenExpiration);
     }
 
-    public String generateToken(String username) {
-        return generateToken(username, Map.of());
+    public String generateRefreshToken(String username) {
+        return buildToken(username, refreshTokenExpiration);
+    }
+
+    private String buildToken(String username, long expirationMillis) {
+        return Jwts.builder()
+                .setSubject(username)
+                .setIssuedAt(new Date(System.currentTimeMillis()))
+                .setExpiration(new Date(System.currentTimeMillis() + expirationMillis))
+                .signWith(getSigningKey(), SignatureAlgorithm.HS256)
+                .compact();
     }
 
     public String extractUsername(String token) {
@@ -55,8 +61,7 @@ public class JwtService {
     }
 
     public boolean isTokenValid(String token, String username) {
-        final String extractedUsername = extractUsername(token);
-        return (extractedUsername.equals(username) && !isTokenExpired(token));
+        return extractUsername(token).equals(username) && !isTokenExpired(token);
     }
 
     private boolean isTokenExpired(String token) {

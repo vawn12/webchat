@@ -30,9 +30,7 @@ public class AccountServiceImpl implements AccountService {
                 .build();
     }
 
-    // Chuyển từ AccountDTO (DTO) sang Account (Entity)
     public Account convertToEntity(AccountDTO dto) {
-        // password sẽ được hash ở đây trước khi lưu vào entity
         return Account.builder()
                 .username(dto.getUsername())
                 .email(dto.getEmail())
@@ -102,7 +100,7 @@ public class AccountServiceImpl implements AccountService {
                 .status(account.getStatus())
                 .build();
 
-        // Lưu cache trong Redis 30 phút (chỉ thông tin, không mật khẩu)
+        // Lưu cache trong Redis 30 phút
         redisService.save(cacheKey, dto, 30);
 
         return dto;

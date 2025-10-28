@@ -42,8 +42,8 @@ public class ForgotService {
 
     @Transactional
     public ForgotPasswordDTO createForgotPassword(ForgotPasswordDTO dto) {
-        Account account = accountRepository.findById(dto.getId())
-                .orElseThrow(() -> new RuntimeException("Account not found with ID: " + dto.getAccountId()));
+        Account account = accountRepository.findById(dto.getAccountId())
+                .orElseThrow(() -> new RuntimeException("Account not found with ID: " + dto.getId()));
 
         Optional<ForgotPassword> existing = forgotPasswordRepository.findByAccount(account);
         if (existing.isPresent()) {

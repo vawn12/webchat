@@ -34,12 +34,16 @@ public class AuthServiceImpl implements AuthService {
         if (account == null)
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
                     .body(ApiResponse.fail("Sai tên tài khoản hoặc mật khẩu"));
-        //JWT token
-        String token = jwtService.generateToken(account.getUsername());
-        // Lưu token vào Redis
-        redisService.saveToken(token, account.getUsername());
+
+        String accessToken = jwtService.generateAccessToken(account.getUsername());
+        String refreshToken = jwtService.generateRefreshToken(account.getUsername());
+
+        // Lưu refreshToken trong Redis
+        redisService.saveToken(refreshToken, account.getUsername());
+
         Map<String, Object> data = Map.of(
-                "token", token,
+                "accessToken", accessToken,
+                "refreshToken", refreshToken,
                 "user", AccountResponse.builder()
                         .id(account.getAccountId())
                         .email(account.getEmail())
@@ -51,6 +55,7 @@ public class AuthServiceImpl implements AuthService {
 
         return ResponseEntity.ok(ApiResponse.success("Đăng nhập thành công", data));
     }
+
     @Override
     public ResponseEntity<ApiResponse<?>> register(RegisterRequest request) {
         String email = request.getEmail().trim();
@@ -156,15 +161,55 @@ public class AuthServiceImpl implements AuthService {
 
     //LOGOUT
     @Override
-    public ResponseEntity<ApiResponse<?>> logout(String authHeader) {
-        if (authHeader == null || !authHeader.startsWith("Bearer "))
-            return ResponseEntity.badRequest().body(ApiResponse.fail("Token không hợp lệ"));
+    public ResponseEntity<ApiResponse<?>> logout(String refreshToken) {
+        if (refreshToken == null || refreshToken.isEmpty()) {
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                    .body(ApiResponse.fail("Refresh token không được để trống."));
+        }
 
-        String token = authHeader.substring(7);
-        redisService.deleteToken(token);
+        // Kiểm tra token có tồn tại trong Redis không
+        if (!redisService.isTokenValid(refreshToken)) {
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                    .body(ApiResponse.fail("Refresh token không hợp lệ hoặc đã bị thu hồi."));
+        }
+        // Lấy username để xóa cache user
+        String username = redisService.getUsernameFromToken(refreshToken);
+        // Xóa token khỏi Redis
+        redisService.deleteToken(refreshToken);
+
+        //xóa cache user để force login lại
+        if (username != null) {
+            redisService.deleteUserCache(username);
+        }
 
         return ResponseEntity.ok(ApiResponse.success("Đăng xuất thành công", null));
     }
+
+    @Override
+    public ResponseEntity<ApiResponse<?>> refresh(String refreshToken) {
+        if (refreshToken == null || !redisService.isTokenValid(refreshToken)) {
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                    .body(ApiResponse.fail("Refresh token không hợp lệ hoặc đã bị thu hồi."));
+        }
+
+        String username = jwtService.extractUsername(refreshToken);
+
+        // Sinh token mới
+        String newAccess = jwtService.generateAccessToken(username);
+        String newRefresh = jwtService.generateRefreshToken(username);
+
+        // Thu hồi token cũ và lưu lại token mới
+        redisService.deleteToken(refreshToken);
+        redisService.saveToken(newRefresh, username);
+
+        Map<String, Object> data = Map.of(
+                "accessToken", newAccess,
+                "refreshToken", newRefresh
+        );
+
+        return ResponseEntity.ok(ApiResponse.success("Làm mới token thành công.", data));
+    }
+
 
     private String generateOtp() {
         Random rand = new Random();

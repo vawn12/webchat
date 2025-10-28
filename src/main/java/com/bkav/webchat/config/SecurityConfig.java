@@ -72,7 +72,6 @@ public class SecurityConfig {
         return source;
     }
 
-    // Cho phép AuthenticationManager để service sử dụng
     @Bean
     public AuthenticationManager authenticationManager(AuthenticationConfiguration config) throws Exception {
         return config.getAuthenticationManager();
