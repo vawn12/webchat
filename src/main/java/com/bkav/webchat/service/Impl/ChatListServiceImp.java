@@ -50,4 +50,5 @@ public class ChatListServiceImp implements ChatListService {
     public record ChatListUpdateEvent(Long conversationId) {
 
     }
+
 }

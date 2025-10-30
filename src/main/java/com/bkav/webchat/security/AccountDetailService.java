@@ -21,7 +21,7 @@ public class AccountDetailService implements UserDetailsService {
         Account account = accountRepository.findByEmail(username)
                 .orElseThrow(() -> new UsernameNotFoundException("User not found: " + username));
 
-        boolean locked = account.getStatus() == Account_status.BANNER;
+        boolean locked = account.getStatus() == Account_status.banner;
 
         return User.builder()
                 .username(account.getEmail())

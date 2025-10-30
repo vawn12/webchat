@@ -108,7 +108,7 @@ public class AuthServiceImpl implements AuthService {
                 .displayName(verifyToken.getEmail().split("@")[0])
                 .email(verifyToken.getEmail())
                 .username(verifyToken.getFullName())
-                .status(Account_status.OFFLINE)
+                .status(Account_status.offline)
                 .build();
 
         accountService.register(dto, verifyToken.getPassword());

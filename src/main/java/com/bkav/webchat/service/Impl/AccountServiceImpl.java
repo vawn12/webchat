@@ -9,6 +9,8 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.stereotype.Service;
 
+import java.util.List;
+
 @Service
 public class AccountServiceImpl implements AccountService {
     @Autowired
@@ -35,7 +37,7 @@ public class AccountServiceImpl implements AccountService {
                 .username(dto.getUsername())
                 .email(dto.getEmail())
                 .displayName(dto.getDisplayName())
-                .status(Account_status.OFFLINE)
+                .status(Account_status.offline)
                 .build();
     }
     @Override
@@ -49,7 +51,7 @@ public class AccountServiceImpl implements AccountService {
         // mật khẩu được mã hóa
         entity.setPasswordHash(encoder.encode(rawPassword));
         if (entity.getStatus() == null) {
-            entity.setStatus(Account_status.OFFLINE);
+            entity.setStatus(Account_status.offline);
         }
         Account saved = accountRepository.save(entity);
         return convertToDTO(saved);
@@ -111,5 +113,10 @@ public class AccountServiceImpl implements AccountService {
         Account entity = convertToEntity(dto);
         Account saved = accountRepository.save(entity);
         return convertToDTO(saved);
+    }
+
+    @Override
+    public List<Account> getAllAccount (){
+        return accountRepository.findAll();
     }
 }

@@ -20,7 +20,7 @@ public class Message {
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "conversation_id", nullable = false,
             foreignKey = @ForeignKey(name = "fk_message_conversation"))
-    private Conversation conversation;
+    private Conversation ConversationId;
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "sender_id", nullable = false,

@@ -48,7 +48,7 @@ public class OAuth2LoginSuccessHandler implements AuthenticationSuccessHandler {
             account.setEmail(email);
             account.setDisplayName(name);
             account.setAvatarUrl(avatarUrl);
-            account.setStatus(Account_status.ONLINE);
+            account.setStatus(Account_status.online);
             accountRepository.save(account);
         }
 
