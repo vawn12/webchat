@@ -50,7 +50,7 @@ public class SecurityConfig {
                         ).permitAll()
                         // cho phép preflight CORS
                         .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
-                        // tất cả còn lại phải xác thực (bao gồm /api/message/**)
+                        // tất cả còn lại phải xác thực
                         .anyRequest().authenticated()
                 )
                 .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class

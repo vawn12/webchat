@@ -1,7 +1,7 @@
 package com.bkav.webchat.service.Impl;
 
 import com.bkav.webchat.dto.ApiResponse;
-import com.bkav.webchat.dto.m.MessageResponseDTO;
+import com.bkav.webchat.dto.MessageResponseDTO;
 import com.bkav.webchat.dto.request.ChatMessageRequest;
 import com.bkav.webchat.dto.request.ReactionRequest;
 import com.bkav.webchat.entity.*;
@@ -76,8 +76,8 @@ public class MessageServiceImpl implements MessageService {
             return ApiResponse.fail("Không tìm thấy cuộc trò chuyện.");
         }
 
-        // Lấy sender từ username (thay cho giả lập setAccountId(1))
-        var sender = accountService.getAccountEntityByUsername(username); // giả sử AccountService có phương thức này
+        // Lấy sender từ username
+        var sender = accountService.getAccountEntityByUsername(username); 
         if (sender == null) {
             return ApiResponse.fail("Không tìm thấy người gửi (user).");
         }

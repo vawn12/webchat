@@ -6,9 +6,9 @@ import org.springframework.data.jpa.repository.JpaRepository;
 import java.util.Optional;
 
 public interface VerifyTokenRepository extends JpaRepository<VerifyToken,Integer> {
-    public Optional<VerifyToken> findByEmail(String email);
+     Optional<VerifyToken> findByEmail(String email);
 
-    public void deleteByEmail(String email);
+     void deleteByEmail(String email);
 
-    public Optional<VerifyToken> findByToken(String token);
+     Optional<VerifyToken> findByToken(String token);
 }

@@ -1,7 +1,7 @@
 package com.bkav.webchat.service;
 
 import com.bkav.webchat.dto.ApiResponse;
-import com.bkav.webchat.dto.m.MessageResponseDTO;
+import com.bkav.webchat.dto.MessageResponseDTO;
 import com.bkav.webchat.dto.request.ChatMessageRequest;
 import com.bkav.webchat.dto.request.ReactionRequest;
 import org.springframework.web.multipart.MultipartFile;

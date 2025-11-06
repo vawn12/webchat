@@ -18,7 +18,7 @@ public class JwtService {
     private String secretKey;
 
     @Value("${jwt.access-expiration}")
-    private long accessTokenExpiration; // 15 * 60 * 1000 = 15 phút
+    private long accessTokenExpiration;
 
     @Value("${jwt.refresh-expiration}")
     private long refreshTokenExpiration;

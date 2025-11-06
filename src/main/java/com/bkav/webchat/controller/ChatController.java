@@ -1,7 +1,7 @@
 package com.bkav.webchat.controller;
 
 import com.bkav.webchat.dto.ApiResponse;
-import com.bkav.webchat.dto.m.MessageResponseDTO;
+import com.bkav.webchat.dto.MessageResponseDTO;
 import com.bkav.webchat.dto.request.ChatMessageRequest;
 import com.bkav.webchat.dto.request.ReactionRequest;
 import com.bkav.webchat.service.MessageService;

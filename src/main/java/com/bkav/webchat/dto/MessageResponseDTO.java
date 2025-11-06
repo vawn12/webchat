@@ -1,4 +1,4 @@
-package com.bkav.webchat.dto.m;
+package com.bkav.webchat.dto;
 import lombok.*;
 
 @Data
