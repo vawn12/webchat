@@ -14,4 +14,6 @@ public interface AccountService {
     AccountDTO convertToDTO(Account account);
     Account convertToEntity(AccountDTO dto);
     List<Account> getAllAccount ();
+    Account getAccountEntityByUsername(String username);
+    List<Account> findByKeyword(String keyword);
 }

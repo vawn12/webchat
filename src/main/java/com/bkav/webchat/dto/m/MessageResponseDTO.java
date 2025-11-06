@@ -6,7 +6,7 @@ import lombok.*;
 @AllArgsConstructor
 @Builder
 public class MessageResponseDTO {
-    private Long messageId;
+    private Integer messageId;
     private Integer conversationId;
     private Integer senderId;
     private String content;

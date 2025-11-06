@@ -1,8 +1,11 @@
 package com.bkav.webchat.entity;
 
+import com.bkav.webchat.enumtype.ConversationType;
 import jakarta.persistence.*;
 import lombok.*;
 import java.time.LocalDateTime;
+import java.util.HashSet;
+import java.util.Set;
 
 @Entity
 @Table(name = "conversation")
@@ -19,9 +22,9 @@ public class Conversation {
 
     @Column(name = "name", length = 100)
     private String name;
-
+    @Enumerated(EnumType.STRING)
     @Column(name = "type", nullable = false, length = 20)
-    private String type = "private"; // private | group
+    private ConversationType type ;
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "created_by", nullable = false,
@@ -30,6 +33,9 @@ public class Conversation {
 
     @Column(name = "created_at", updatable = false)
     private LocalDateTime createdAt;
+
+    @OneToMany(mappedBy = "conversation", cascade = CascadeType.ALL, orphanRemoval = true,fetch = FetchType.LAZY)
+    private Set<Participants> participants = new HashSet<>();
 
     @PrePersist
     public void prePersist() {

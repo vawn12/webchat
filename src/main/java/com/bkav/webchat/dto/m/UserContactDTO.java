@@ -12,9 +12,12 @@ import java.time.LocalDateTime;
 @NoArgsConstructor
 @Builder
 public class UserContactDTO {
-    private Long contactId;
-    private AccountDTO owner;
-    private AccountDTO contactUser;
-    private ContactStatus status;           // trạng thái: PENDING, ACCEPTED, BLOCKED,...
+    private Integer contactId;
+    private Integer ownerId;
+    private String ownerName;
+    private Integer contactUserId;
+    private String contactUserName;
+    private String contactUserAvatar;
+    private String status;
     private LocalDateTime createdAt;
 }

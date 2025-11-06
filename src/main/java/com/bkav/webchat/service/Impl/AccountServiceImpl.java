@@ -107,6 +107,11 @@ public class AccountServiceImpl implements AccountService {
 
         return dto;
     }
+    @Override
+    public Account getAccountEntityByUsername(String username) {
+        return accountRepository.findByUsername(username).orElse(null);
+    }
+
 
     @Override
     public AccountDTO save(AccountDTO dto){
@@ -119,4 +124,13 @@ public class AccountServiceImpl implements AccountService {
     public List<Account> getAllAccount (){
         return accountRepository.findAll();
     }
+
+    @Override
+    public List<Account> findByKeyword(String keyword) {
+        if (keyword == null || keyword.trim().isEmpty()) {
+            return accountRepository.findAll(); // Nếu không nhập từ khóa thì trả toàn bộ
+        }
+        return accountRepository.searchAccounts(keyword.trim());
+    }
+
 }

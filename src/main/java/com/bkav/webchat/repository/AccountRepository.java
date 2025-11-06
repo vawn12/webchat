@@ -2,8 +2,11 @@ package com.bkav.webchat.repository;
 
 import com.bkav.webchat.entity.Account;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
+import java.util.List;
 import java.util.Optional;
 @Repository
 public interface AccountRepository extends JpaRepository<Account,Integer> {
@@ -11,4 +14,13 @@ public interface AccountRepository extends JpaRepository<Account,Integer> {
     boolean existsByUsername(String username);
     boolean existsByEmail(String email);
     Optional<Account> findByEmail(String email);
+
+    @Query("SELECT a FROM Account a WHERE LOWER(a.displayName) LIKE LOWER(CONCAT('%', :keyword, '%'))")
+    List<Account> findByKeyword(@Param("keyword") String keyword);
+
+    @Query("SELECT a FROM Account a " +
+            "WHERE LOWER(a.displayName) LIKE LOWER(CONCAT('%', :keyword, '%')) " +
+            "   OR LOWER(a.username) LIKE LOWER(CONCAT('%', :keyword, '%'))")
+    List<Account> searchAccounts(@Param("keyword") String keyword);
+
 }

@@ -28,7 +28,7 @@ public class UserContact {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     @Column(name = "contact_id")
-    private Long contactId;
+    private Integer contactId;
 
     // Quan hệ Many-to-One: Nhiều contact entry thuộc về một owner
     @ManyToOne(fetch = FetchType.LAZY)
@@ -42,7 +42,7 @@ public class UserContact {
 
     @Enumerated(EnumType.STRING)
     @Column(name = "status", length = 20)
-    private ContactStatus status; // Gán giá trị mặc định
+    private ContactStatus status;
 
     @CreationTimestamp
     @Column(name = "created_at", nullable = false, updatable = false)

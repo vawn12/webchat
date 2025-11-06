@@ -18,13 +18,13 @@ public class AccountDetailService implements UserDetailsService {
 
     @Override
     public UserDetails loadUserByUsername(String username) throws UsernameNotFoundException {
-        Account account = accountRepository.findByEmail(username)
+        Account account = accountRepository.findByUsername(username)
                 .orElseThrow(() -> new UsernameNotFoundException("User not found: " + username));
 
         boolean locked = account.getStatus() == Account_status.banner;
 
         return User.builder()
-                .username(account.getEmail())
+                .username(account.getUsername())
                 .password(account.getPasswordHash())
                 .accountLocked(locked)
                 .roles("USER")
