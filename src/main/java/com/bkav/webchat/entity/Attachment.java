@@ -19,8 +19,7 @@ public class Attachment {
     private Long attachmentId;
 
     @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "message_id", nullable = false,
-            foreignKey = @ForeignKey(name = "fk_attachment_message"))
+    @JoinColumn(name = "message_id", nullable = false)
     private Message message;
 
     @Column(name = "file_url", nullable = false, columnDefinition = "TEXT")

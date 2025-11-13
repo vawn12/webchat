@@ -13,7 +13,8 @@ import java.time.LocalDateTime;
 @Table (name = "Message_Reaction")
 @Entity
 
-public class MessageReaction {
+public class
+MessageReaction {
 
     @EmbeddedId
     private MessageReactionId id;

@@ -8,15 +8,23 @@ import com.bkav.webchat.entity.*;
 import com.bkav.webchat.repository.*;
 import com.bkav.webchat.service.AccountService;
 import com.bkav.webchat.service.MessageService;
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import lombok.*;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.io.File;
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
+import java.util.stream.Collectors;
 
 @Service
 
@@ -35,6 +43,26 @@ public class MessageServiceImpl implements MessageService {
     private MessageReactionRepository  messageReactionRepository;
     @Autowired
     private AttachmentRepository attachmentRepository;
+    @Autowired
+    private ApplicationEventPublisher eventPublisher;
+    @Autowired
+    private ParticipationRepository participationRepository;
+    @Autowired
+    private MessageSearchRepository messageSearchRepository;
+    @Autowired
+    private ObjectMapper objectMapper;
+
+
+    @Getter
+    @AllArgsConstructor
+    @Data
+    @Builder
+    public static class MessageSyncEvent {
+        private final Message message;
+        private final String action; //save hoặc delete
+
+    }
+
 
     private Message toEntity(ChatMessageRequest request, Conversation conversation, Account sender) {
         return Message.builder()
@@ -42,7 +70,7 @@ public class MessageServiceImpl implements MessageService {
                 .sender(sender)
                 .content(request.getContent())
                 .messageType(request.getMessageType())
-                .isRead(false)
+//                .isRead(false)
                 .createdAt(LocalDateTime.now())
                 .updatedAt(LocalDateTime.now())
                 .build();
@@ -50,6 +78,15 @@ public class MessageServiceImpl implements MessageService {
 
 
     private MessageResponseDTO toDTO(Message message) {
+        Map<String, Object> metadataMap = null;
+        if (message.getMetadata() != null && !message.getMetadata().isBlank()) {
+            try {
+                // Chuyển đổi chuỗi JSON từ DB thành Map
+                metadataMap = objectMapper.readValue(message.getMetadata(), new TypeReference<Map<String, Object>>() {});
+            } catch (JsonProcessingException e) {
+                e.printStackTrace();
+            }
+        }
         return MessageResponseDTO.builder()
                 .messageId(message.getMessageId())
                 .conversationId(message.getConversation().getConversationId())
@@ -57,6 +94,7 @@ public class MessageServiceImpl implements MessageService {
                 .content(message.getContent())
                 .messageType(message.getMessageType())
                 .createdAt(message.getCreatedAt().toString())
+                .metadata(metadataMap)
                 .build();
     }
 
@@ -70,6 +108,7 @@ public class MessageServiceImpl implements MessageService {
                 .build();
     }
     @Override
+    @Transactional
     public ApiResponse<MessageResponseDTO> sendMessage(Integer conversationId, ChatMessageRequest request, String username) {
         Optional<Conversation> optionalConversation = conversationRepository.findById(conversationId);
         if (optionalConversation.isEmpty()) {
@@ -77,23 +116,61 @@ public class MessageServiceImpl implements MessageService {
         }
 
         // Lấy sender từ username
-        var sender = accountService.getAccountEntityByUsername(username); 
+        var sender = accountService.getAccountEntityByUsername(username);
         if (sender == null) {
             return ApiResponse.fail("Không tìm thấy người gửi (user).");
         }
 
         // Tạo và lưu Message Entity
         Message message = toEntity(request, optionalConversation.get(), sender);
+        //xử lý reply
+        if (request.getRepliedToMessageId() != null) {
+            Optional<Message> originalMessageOpt = messageRepository.findById(request.getRepliedToMessageId());
+
+            // reply nếu tin nhắn gốc tồn tại VÀ trong cùng cuộc trò chuyện
+            if (originalMessageOpt.isPresent() &&
+                    originalMessageOpt.get().getConversation().getConversationId().equals(conversationId)) {
+
+                Message originalMessage = originalMessageOpt.get();
+
+                // Tạo đối tượng Map chứa thông tin reply
+                Map<String, Object> replyInfo = Map.of(
+                        "repliedToMessageId", originalMessage.getMessageId(),
+                        "repliedToSenderId", originalMessage.getSender().getAccountId(),
+                        "repliedToSenderName", originalMessage.getSender().getDisplayName(),
+                        "repliedToContent", originalMessage.getContent()
+                );
+
+                // Tạo metadata chính
+                Map<String, Object> metadata = Map.of("replyInfo", replyInfo);
+
+                // Chuyển Map thành chuỗi JSON để lưu vào DB
+                try {
+                    message.setMetadata(objectMapper.writeValueAsString(metadata));
+                } catch (JsonProcessingException e) {
+                    e.printStackTrace();
+                }
+            }
+        }
         message = messageRepository.save(message);
 
         // Lưu MessageStatus
         MessageStatus status = toMessageStatus(message, sender, "sent");
         messageStatusRepository.save(status);
+        //lưu
+
+        eventPublisher.publishEvent(new MessageSyncEvent(message, "SAVE"));
 
         MessageResponseDTO dto = toDTO(message);
 
         // Gửi real-time message qua WebSocket topic
-        messagingTemplate.convertAndSend("/topic/conversation/" + dto.getConversationId(), dto);
+        var payload = Map.of(
+                "event", "MESSAGE_SENT",
+                "conversationId", conversationId,
+                "data", dto
+        );
+        messagingTemplate.convertAndSend("/topic/conversation/" + conversationId, payload);
+
         return ApiResponse.success("Gửi tin nhắn thành công.", dto);
     }
     //update
@@ -130,10 +207,24 @@ public class MessageServiceImpl implements MessageService {
         message.setContent(request.getContent());
         message.setMessageType(request.getMessageType());
         message.setUpdatedAt(LocalDateTime.now());
-        messageRepository.save(message);
+        Message updated = messageRepository.save(message);
 
-        MessageResponseDTO dto = toDTO(message);
-        messagingTemplate.convertAndSend("/topic/conversation/" + conversationId, dto);
+        eventPublisher.publishEvent(new MessageSyncEvent(updated, "SAVE"));
+
+        MessageResponseDTO dto = toDTO(updated);
+        var payload = Map.of(
+                "event", "MESSAGE_UPDATE",
+                "conversationId", conversationId,
+                "data", Map.of(
+                        "messageId", updated.getMessageId(),
+                        "senderId", updated.getSender().getAccountId(),
+                        "content", updated.getContent(),
+                        "messageType", updated.getMessageType(),
+                        "updatedAt", updated.getUpdatedAt().toString()
+                )
+        );
+
+        messagingTemplate.convertAndSend("/topic/conversation/" + conversationId, payload);
 
         return ApiResponse.success("Cập nhật tin nhắn thành công.", dto);
     }
@@ -171,7 +262,14 @@ public class MessageServiceImpl implements MessageService {
         }
 
         messageRepository.delete(message);
-        messagingTemplate.convertAndSend("/topic/conversation/" + conversationId, "deleted:" + request.getMessageId());
+        eventPublisher.publishEvent(new MessageSyncEvent(message, "DELETE"));
+
+        var payload = Map.of(
+                "event", "MESSAGE_DELETE",
+                "conversationId", conversationId,
+                "data", Map.of("messageId", request.getMessageId())
+        );
+        messagingTemplate.convertAndSend("/topic/conversation/" + conversationId, payload);
 
         return ApiResponse.success("Xóa tin nhắn thành công.", null);
     }
@@ -179,18 +277,16 @@ public class MessageServiceImpl implements MessageService {
     //thả react cho 1 message
 
     public ApiResponse<String> reactToMessage(Integer conversationId, ReactionRequest request, String username) {
-        // Validate input
         if (request.getMessageId() == null || request.getReactionType() == null) {
-            return ApiResponse.fail("Thiếu messageId hoặc reactionType trong request.");
+            return ApiResponse.fail("Thiếu messageId hoặc type trong request.");
         }
 
-        // Chỉ cho phép 5 emoji mặc định
-        List<String> allowedReactions = List.of("👍", "❤️", "😂", "😢", "😡");
-        if (!allowedReactions.contains(request.getReactionType())) {
-            return ApiResponse.fail("Reaction không hợp lệ. Chỉ được phép: " + allowedReactions);
+        // 6 loại cảm xúc
+        List<Integer> allowedTypes = List.of(1, 2, 3, 4, 5, 6);
+        if (!allowedTypes.contains(request.getReactionType())) {
+            return ApiResponse.fail("Type không hợp lệ. Chỉ được phép từ 1 đến 6.");
         }
 
-        // Kiểm tra tồn tại conversation và message
         Optional<Message> optionalMessage = messageRepository.findById(request.getMessageId());
         if (optionalMessage.isEmpty()) {
             return ApiResponse.fail("Không tìm thấy tin nhắn.");
@@ -201,84 +297,130 @@ public class MessageServiceImpl implements MessageService {
             return ApiResponse.fail("Tin nhắn không thuộc cuộc trò chuyện này.");
         }
 
-        // Lấy user hiện tại
         Account user = accountService.getAccountEntityByUsername(username);
         if (user == null) {
             return ApiResponse.fail("Không tìm thấy người dùng.");
         }
 
-        // Kiểm tra xem user đã thả react chưa
         Optional<MessageReaction> existingReaction =
                 messageReactionRepository.findByMessage_MessageIdAndAccount_AccountId(request.getMessageId(), user.getAccountId());
 
+        String action;
         if (existingReaction.isPresent()) {
             MessageReaction reaction = existingReaction.get();
-            reaction.setReactionType(request.getReactionType());
-            reaction.setCreatedAt(LocalDateTime.now());
-            messageReactionRepository.save(reaction);
+            // Nếu click lại cùng type thì xóa reaction
+            if (reaction.getReactionType().equals(request.getReactionType())) {
+                messageReactionRepository.delete(reaction);
+                action = "remove";
+            } else {
+                // Nếu khác type → cập nhật type mới
+                reaction.setReactionType(String.valueOf(request.getReactionType()));
+                reaction.setCreatedAt(LocalDateTime.now());
+                messageReactionRepository.save(reaction);
+                action = "update";
+            }
         } else {
+            // Tạo mới
             MessageReaction.MessageReactionId reactionId =
                     new MessageReaction.MessageReactionId(message.getMessageId(), user.getAccountId());
             MessageReaction reaction = MessageReaction.builder()
                     .id(reactionId)
                     .message(message)
                     .account(user)
-                    .reactionType(request.getReactionType())
+                    .reactionType(String.valueOf(request.getReactionType()))
                     .createdAt(LocalDateTime.now())
                     .build();
-
             messageReactionRepository.save(reaction);
+            action = "add";
         }
 
-        // Gửi thông báo realtime đến FE
-        messagingTemplate.convertAndSend(
-                "/topic/conversation/" + conversationId,
-                username + " reacted '" + request.getReactionType() + "' to message " + request.getMessageId()
+        var payload = Map.of(
+                "event", "MESSAGE_REACT",
+                "conversationId", conversationId,
+                "data", Map.of(
+                        "messageId", request.getMessageId(),
+                        "accountId", user.getAccountId(),
+                        "reactionType", request.getReactionType(),
+                        "action", action
+                )
         );
+        messagingTemplate.convertAndSend("/topic/conversation/" + conversationId, payload);
+        return ApiResponse.success("Reaction xử lý thành công (" + action + ").", action);
 
-        return ApiResponse.success("Đã thả reaction thành công.", request.getReactionType());
     }
 
 
-    public ApiResponse<String> uploadAttachment(Integer conversationId, MultipartFile file, Integer messageId, String username) {
+    public ApiResponse<MessageResponseDTO> uploadAttachment(Integer conversationId, MultipartFile file, String username) {
         try {
-            // Kiểm tra tin nhắn hợp lệ
-            Optional<Message> optionalMessage = messageRepository.findById(messageId);
-            if (optionalMessage.isEmpty()) {
-                return ApiResponse.fail("Không tìm thấy tin nhắn để đính kèm file.");
-            }
-            Message message = optionalMessage.get();
+            // Kiểm tra cuộc trò chuyện hợp lệ
+            Conversation conversation = conversationRepository.findById(conversationId)
+                    .orElseThrow(() -> new RuntimeException("Không tìm thấy cuộc trò chuyện."));
 
-            if (!message.getConversation().getConversationId().equals(conversationId)) {
-                return ApiResponse.fail("Tin nhắn không thuộc cuộc trò chuyện này.");
+            Account sender = accountService.getAccountEntityByUsername(username);
+            if (sender == null) {
+                return ApiResponse.fail("Không tìm thấy người gửi.");
             }
 
-            // Lưu file vật lý (tạm thời trong /uploads)
+            // Lưu file vật lý
             String uploadDir = System.getProperty("user.dir") + "/uploads/";
             File directory = new File(uploadDir);
             if (!directory.exists()) directory.mkdirs();
 
             String originalName = file.getOriginalFilename();
-            String filePath = uploadDir + System.currentTimeMillis() + "_" + originalName;
+            String storedName = System.currentTimeMillis() + "_" + originalName;
+            String filePath = uploadDir + storedName;
+
             file.transferTo(new File(filePath));
 
-            // Tạo entity Attachment
+            // Tạo message mới
+            Message message = Message.builder()
+                    .conversation(conversation)
+                    .sender(sender)
+                    .content(originalName)
+                    .messageType("file")
+                    .createdAt(LocalDateTime.now())
+                    .updatedAt(LocalDateTime.now())
+                    .build();
+            messageRepository.save(message);
+
+            // Tạo entity Attachment gắn với message
             Attachment attachment = Attachment.builder()
                     .message(message)
-                    .fileUrl(filePath)
+                    .fileUrl("/uploads/" + storedName)
                     .fileType(file.getContentType())
                     .fileSize(file.getSize())
                     .uploadedAt(LocalDateTime.now())
                     .build();
             attachmentRepository.save(attachment);
 
-            //  Gửi realtime thông báo cho client trong đoạn chat
-            messagingTemplate.convertAndSend(
-                    "/topic/conversation/" + conversationId,
-                    username + " đã gửi tệp tin: " + originalName
+            // DTO phản hồi
+            MessageResponseDTO dto = MessageResponseDTO.builder()
+                    .messageId(message.getMessageId())
+                    .conversationId(conversationId)
+                    .senderId(sender.getAccountId())
+                    .content(originalName)
+                    .messageType("file")
+                    .createdAt(message.getCreatedAt().toString())
+                    .build();
+
+            //Gửi realtime JSON
+            var payload = Map.of(
+                    "event", "FILE_SENT",
+                    "conversationId", conversationId,
+                    "data", Map.of(
+                            "messageId", message.getMessageId(),
+                            "sender", sender.getDisplayName(),
+                            "fileName", originalName,
+                            "fileUrl", "/uploads/" + storedName,
+                            "fileType", file.getContentType(),
+                            "fileSize", file.getSize(),
+                            "createdAt", message.getCreatedAt().toString()
+                    )
             );
 
-            return ApiResponse.success("Tải file thành công.", filePath);
+            messagingTemplate.convertAndSend("/topic/conversation/" + conversationId, payload);
+
+            return ApiResponse.success("Gửi file thành công.", dto);
 
         } catch (Exception e) {
             e.printStackTrace();
@@ -286,4 +428,30 @@ public class MessageServiceImpl implements MessageService {
         }
     }
 
+
+    public ApiResponse<List<MessageDocument>> searchMessages(String query, String username) {
+
+        // Lấy thông tin người dùng
+        Account currentUser = accountService.getAccountEntityByUsername(username);
+        if (currentUser == null) {
+            return ApiResponse.fail("Không tìm thấy người dùng.");
+        }
+
+        // Lấy danh sách các cuộc trò chuyện user được phép xem
+        List<Integer> userConversationIds = participationRepository
+                .findAllByAccount_AccountId(currentUser.getAccountId())
+                .stream()
+                .map(participant -> participant.getConversation().getConversationId())
+                .collect(Collectors.toList());
+
+        if (userConversationIds.isEmpty()) {
+            return ApiResponse.success("Không tìm thấy kết quả.", List.of());
+        }
+
+        List<MessageDocument> results =
+                messageSearchRepository.findByContentContainingAndConversationIdIn(query, userConversationIds);
+
+
+        return ApiResponse.success("Tìm thấy " + results.size() + " kết quả.", results);
+    }
 }

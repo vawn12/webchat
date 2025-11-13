@@ -18,13 +18,11 @@ public class MessageStatus {
     private Long statusId;
 
     @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "message_id", nullable = false,
-            foreignKey = @ForeignKey(name = "fk_message_status_message"))
+    @JoinColumn(name = "message_id", nullable = false)
     private Message message;
 
     @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "account_id", nullable = false,
-            foreignKey = @ForeignKey(name = "fk_message_status_account"))
+    @JoinColumn(name = "account_id", nullable = false)
     private Account account;
 
     @Column(name = "status", length = 20)

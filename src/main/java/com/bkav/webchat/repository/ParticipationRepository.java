@@ -13,4 +13,5 @@ public interface ParticipationRepository extends JpaRepository<Participants, Lon
     List<Participants> findByConversation_ConversationId(Long conversationId);
     Optional<Participants> findByConversationAndAccount(Conversation conversation, Account account);
     List<Participants> findAllByConversation(Conversation conversation);
+    List<Participants> findAllByAccount_AccountId(Integer accountId);
 }

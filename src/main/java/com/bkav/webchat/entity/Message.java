@@ -2,6 +2,9 @@ package com.bkav.webchat.entity;
 
 import jakarta.persistence.*;
 import lombok.*;
+import org.hibernate.annotations.JdbcTypeCode;
+import org.hibernate.type.SqlTypes;
+
 import java.time.LocalDateTime;
 
 @Entity
@@ -22,8 +25,7 @@ public class Message {
     private Conversation conversation;
 
     @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "sender_id", nullable = false,
-            foreignKey = @ForeignKey(name = "fk_message_account"))
+    @JoinColumn(name = "sender_id", nullable = false)
     private Account sender;
 
     @Column(name = "content", columnDefinition = "TEXT")
@@ -38,9 +40,9 @@ public class Message {
     @Column(name = "updated_at")
     private LocalDateTime updatedAt;
 
-    @Column(name = "is_read")
-    private Boolean isRead = false;
-
+    @JdbcTypeCode(SqlTypes.JSON)
+    @Column(name = "Metadata", columnDefinition = "jsonb")
+    private String metadata;
     @PrePersist
     public void prePersist() {
         if (createdAt == null) createdAt = LocalDateTime.now();

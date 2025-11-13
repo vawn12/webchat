@@ -41,11 +41,11 @@ public interface ConversationRepository extends JpaRepository<Conversation,Integ
     List<Conversation> findAllByTypeAndNameContainingIgnoreCase(ConversationType type, String name);
 
     @Query("""
-  SELECT c FROM Conversation c
-  LEFT JOIN FETCH c.participants p
-  LEFT JOIN FETCH p.account
-  WHERE c.conversationId = :id
-""")
+       SELECT DISTINCT c FROM Conversation c
+       LEFT JOIN FETCH c.participants p
+       LEFT JOIN FETCH p.account
+       WHERE c.conversationId = :id
+       """)
     Optional<Conversation> findByIdWithParticipants(@Param("id") Integer id);
 
 

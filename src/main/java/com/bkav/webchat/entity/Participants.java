@@ -12,10 +12,13 @@ import java.time.LocalDateTime;
 @NoArgsConstructor
 @AllArgsConstructor
 @Builder
+@ToString(exclude = {"conversation"})   // NGĂN vòng lặp toString
+@EqualsAndHashCode(onlyExplicitlyIncluded = true)         // Chỉ hash theo id
 public class Participants {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
+    @EqualsAndHashCode.Include                          // Chỉ dùng id để hash
     @Column(name = "participant_id")
     private Integer participantId;
 

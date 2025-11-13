@@ -4,15 +4,16 @@ import com.bkav.webchat.dto.ApiResponse;
 import com.bkav.webchat.dto.MessageResponseDTO;
 import com.bkav.webchat.dto.request.ChatMessageRequest;
 import com.bkav.webchat.dto.request.ReactionRequest;
+import com.bkav.webchat.entity.MessageDocument;
 import com.bkav.webchat.service.MessageService;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.security.Principal;
+import java.util.List;
 
 
 @RestController
@@ -30,11 +31,6 @@ public class ChatController {
             @RequestBody ChatMessageRequest request,
              Principal principal
     ) {
-        // principal có thể là null nếu user chưa auth
-        if (principal == null || principal.getName() == null) {
-            return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
-                    .body(ApiResponse.fail("Chưa xác thực (missing token)."));
-        }
 
         ApiResponse<MessageResponseDTO> response = messageService.sendMessage(conversationId, request, principal.getName());
         if (!response.isSuccess()) return ResponseEntity.badRequest().body(response);
@@ -47,11 +43,6 @@ public class ChatController {
             @RequestBody ChatMessageRequest request,
             Principal principal
     ) {
-
-        if (principal == null || principal.getName() == null) {
-            return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
-                    .body(ApiResponse.fail("Chưa xác thực (missing token)."));
-        }
 
         ApiResponse<MessageResponseDTO> response = messageService.updateMessage(conversationId, request, principal.getName());
         if (!response.isSuccess()) return ResponseEntity.badRequest().body(response);
@@ -66,46 +57,46 @@ public class ChatController {
             Principal principal
     ) {
 
-        if (principal == null || principal.getName() == null) {
-            return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
-                    .body(ApiResponse.fail("Chưa xác thực (missing token)."));
-        }
-
         ApiResponse<Void> response = messageService.deleteMessage(conversationId, request, principal.getName());
         if (!response.isSuccess()) return ResponseEntity.badRequest().body(response);
         return ResponseEntity.ok(response);
     }
 
     @PostMapping("/react/{conversationId}")
-    public ResponseEntity<ApiResponse<String>> reactToMessage(
+    public ResponseEntity<?> reactToMessage(
             @PathVariable Integer conversationId,
             @RequestBody ReactionRequest request,
             Principal principal
     ) {
-        if (principal == null || principal.getName() == null) {
-            return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
-                    .body(ApiResponse.fail("Chưa xác thực (missing token)."));
-        }
 
-        ApiResponse<String> response = messageService.reactToMessage(conversationId, request, principal.getName());
-        if (!response.isSuccess()) return ResponseEntity.badRequest().body(response);
+        ApiResponse<String> response =
+                messageService.reactToMessage(conversationId, request, principal.getName());
         return ResponseEntity.ok(response);
     }
     @PostMapping("/upload/{conversationId}")
-    public ResponseEntity<ApiResponse<String>> uploadFile(
+    public ResponseEntity<ApiResponse<MessageResponseDTO>> uploadFile(
             @PathVariable Integer conversationId,
             @RequestParam("file") MultipartFile file,
-            @RequestParam("messageId") Integer messageId,
             Principal principal
     ) {
-        if (principal == null || principal.getName() == null) {
-            return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
-                    .body(ApiResponse.fail("Chưa xác thực (missing token)."));
-        }
 
-        ApiResponse<String> response = messageService.uploadAttachment(conversationId, file, messageId, principal.getName());
+        ApiResponse<MessageResponseDTO> response = messageService.uploadAttachment(conversationId, file,  principal.getName());
         if (!response.isSuccess()) return ResponseEntity.badRequest().body(response);
         return ResponseEntity.ok(response);
     }
 
+    @GetMapping("/search")
+    public ResponseEntity<ApiResponse<List<MessageDocument>>> searchMessages(
+            @RequestParam("q") String query,
+            Principal principal
+    ) {
+
+        ApiResponse<List<MessageDocument>> response = messageService.searchMessages(query, principal.getName());
+
+        if (!response.isSuccess()) {
+            return ResponseEntity.badRequest().body(response);
+        }
+
+        return ResponseEntity.ok(response);
+    }
 }
