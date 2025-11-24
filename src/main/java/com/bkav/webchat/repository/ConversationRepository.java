@@ -10,14 +10,6 @@ import java.util.List;
 import java.util.Optional;
 
 public interface ConversationRepository extends JpaRepository<Conversation,Integer> {
-
-    @Query("""
-        SELECT DISTINCT c FROM Conversation c 
-        JOIN c.participants p 
-        WHERE p.account.accountId = :accountId
-        """)
-    List<Conversation> findAllByAccountId(@Param("accountId") Integer accountId);
-
     @Query("""
         SELECT DISTINCT c FROM Conversation c 
         JOIN c.participants p 

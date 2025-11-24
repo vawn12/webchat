@@ -14,5 +14,6 @@ public interface ConversationService {
     Page<ContactResponseDTO> getAllConversation(int page, int size);
     ConversationDTO getConversationDetails(String authorizationHeader, Integer conversationId);
     void leaveGroup(String authorizationHeader, Integer conversationId);
+    ConversationDTO createPrivateConversation(String authorizationHeader, Integer friendId);
 
 }

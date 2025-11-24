@@ -1,0 +1,17 @@
+version: '3.8'
+services:
+  db:
+    
+    image: pg-partman-image
+    # Hoặc nếu muốn build lại mỗi lần chạy thì bỏ dòng 'image' và dùng dòng 'build':
+    # build: .
+    container_name: pg_chat
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: sa123
+      POSTGRES_DB: webchat                 # Tự tạo luôn DB tên là webchat
+    ports:
+      - "5432:5432"
+    volumes:
+    
+      - ./pg_data:/var/lib/postgresql/data

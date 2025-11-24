@@ -39,39 +39,40 @@ public class ConversationServiceImp implements ConversationService {
     @Autowired
     private UserContactRepository userContactRepository;
 
-        public List<ConversationDTO> getConversationsByType(String authorizationHeader, String type) {
-            Account account = extractAccount(authorizationHeader);
-            if (account == null) return List.of();
 
-            List<Conversation> conversations = conversationRepository.findAllByAccountIdAndType(account.getAccountId(), type);
-            return conversations.stream().map(this::mapToDTO).collect(Collectors.toList());
-        }
+    public List<ConversationDTO> getConversationsByType(String authorizationHeader, String type) {
+        Account account = extractAccount(authorizationHeader);
+        if (account == null) return List.of();
 
-        private Account extractAccount(String header) {
-            if (header == null || !header.startsWith("Bearer")) return null;
-            String token = header.substring(7);
-            String username = jwtService.extractUsername(token);
-            return accountRepository.findByUsername(username).orElse(null);
-        }
+        List<Conversation> conversations = conversationRepository.findAllByAccountIdAndType(account.getAccountId(), type);
+        return conversations.stream().map(this::mapToDTO).collect(Collectors.toList());
+    }
 
-        private ConversationDTO mapToDTO(Conversation c) {
-            ConversationDTO dto = new ConversationDTO();
-            dto.setConversationId(c.getConversationId());
-            dto.setName(c.getName());
-            dto.setType(c.getType());
-            dto.setCreatedBy(c.getCreatedBy().getDisplayName());
-            dto.setCreatedAt(c.getCreatedAt());
-            dto.setParticipants(
-                    new ArrayList<>(c.getParticipants()).stream()
-                            .map(p -> new ParticipantDTO(
-                                    p.getAccount().getAccountId(),
-                                    p.getAccount().getDisplayName(),
-                                    p.getAccount().getAvatarUrl(),
-                                    p.getRole()))
-                            .collect(Collectors.toList())
-            );
-            return dto;
-        }
+    private Account extractAccount(String header) {
+        if (header == null || !header.startsWith("Bearer")) return null;
+        String token = header.substring(7);
+        String username = jwtService.extractUsername(token);
+        return accountRepository.findByUsername(username).orElse(null);
+    }
+
+    private ConversationDTO mapToDTO(Conversation c) {
+        ConversationDTO dto = new ConversationDTO();
+        dto.setConversationId(c.getConversationId());
+        dto.setName(c.getName());
+        dto.setType(c.getType());
+        dto.setCreatedBy(c.getCreatedBy().getDisplayName());
+        dto.setCreatedAt(c.getCreatedAt());
+        dto.setParticipants(
+                new ArrayList<>(c.getParticipants()).stream()
+                        .map(p -> new ParticipantDTO(
+                                p.getAccount().getAccountId(),
+                                p.getAccount().getDisplayName(),
+                                p.getAccount().getAvatarUrl(),
+                                p.getRole()))
+                        .collect(Collectors.toList())
+        );
+        return dto;
+    }
     private ContactResponseDTO mapGroupToDTO(Conversation c) {
         Message lastMsg = messageRepository.findTopByConversation_ConversationIdOrderByCreatedAtDesc(c.getConversationId());
         return ContactResponseDTO.builder()
@@ -111,6 +112,7 @@ public class ConversationServiceImp implements ConversationService {
             throw new RuntimeException("Unauthorized: Invalid token");
         }
 
+        // Tạo conversation
         Conversation conversation = new Conversation();
         conversation.setName(name);
         conversation.setType(ConversationType.GROUP);
@@ -118,65 +120,89 @@ public class ConversationServiceImp implements ConversationService {
         conversation.setCreatedAt(LocalDateTime.now());
         conversation = conversationRepository.save(conversation);
 
-        // Thêm người tạo nhóm (admin)
-        Participants admin = new Participants();
-        admin.setConversation(conversation);
-        admin.setAccount(creator);
-        admin.setRole(ParticipantRole.admin);
-        participantRepository.save(admin);
-        conversation.getParticipants().add(admin);
+        //thêm người tạo nhóm admin
+        Participants admin = Participants.builder()
+                .conversation(conversation)
+                .account(creator)
+                .role(ParticipantRole.admin)
+                .build();
 
-        // Thêm các thành viên còn lại
-        for (Integer id : participantIds) {
-            Conversation finalConversation = conversation;
-            accountRepository.findById(id).ifPresent(acc -> {
-                Participants member = new Participants();
-                member.setConversation(finalConversation);
-                member.setAccount(acc);
-                member.setRole(ParticipantRole.member);
-                participantRepository.save(member);
-                finalConversation.getParticipants().add(member);
-            });
+        participantRepository.save(admin);
+
+        //điểu kiện để tạo nhóm
+        if (participantIds == null || participantIds.size() < 2) {
+            throw new RuntimeException("Nhóm phải có ít nhất 3 thành viên (bao gồm người tạo nhóm).");
         }
 
-        System.out.println("Participants size after create = " + conversation.getParticipants().size());
+        // lấy tất cả account để thêm
+        List<Account> accounts = accountRepository.findAllById(participantIds);
 
+        // Tạo list Participants
+        Conversation finalConversation = conversation;
+        List<Participants> members = accounts.stream()
+                .map(acc -> Participants.builder()
+                        .conversation(finalConversation)
+                        .account(acc)
+                        .role(ParticipantRole.member)
+                        .build())
+                .toList();
+        participantRepository.saveAll(members);
 
-        return mapToDTO(conversation);
+        // Load lại conversation kèm participants để trả DTO
+        Conversation fullData = conversationRepository
+                .findByIdWithParticipants(conversation.getConversationId())
+                .orElseThrow(() -> new RuntimeException("đoạn chat không tìm thấy sau khi lưu"));
+
+        return mapToDTO(fullData);
     }
 
     //thêm thành viên mới vào nhóm chát
     @Transactional
-    public ConversationDTO addMembersToGroup(String authorizationHeader, Integer conversationId, List<Integer> newMemberIds) {
+    public ConversationDTO addMembersToGroup(String authorizationHeader,
+                                             Integer conversationId,
+                                             List<Integer> newMemberIds) {
         Account requester = extractAccount(authorizationHeader);
-        if (requester == null) throw new RuntimeException("Unauthorized");
-        //tìm nhưng cuoc tro chuyen
+        if (requester == null) {
+            throw new RuntimeException("Unauthorized");
+        }
+
+        // Lấy conversation
         Conversation conversation = conversationRepository.findById(conversationId)
                 .orElseThrow(() -> new RuntimeException("Conversation not found"));
-        //kiểm tra có phải member trong group không
-        if (!conversation.getType().name().equalsIgnoreCase("GROUP"))
+
+        if (!ConversationType.GROUP.equals(conversation.getType())) {
             throw new RuntimeException("Chỉ nhóm mới được thêm thành viên");
+        }
 
-        Participants requesterParticipant = participantRepository
-                .findByConversationAndAccount(conversation, requester)
+        // Kiểm tra requester có trong nhóm hay không
+        Participants requesterParticipant = participantRepository.findParticipant(
+                        conversationId,
+                        requester.getAccountId()
+                )
                 .orElseThrow(() -> new RuntimeException("Bạn không nằm trong nhóm này"));
-        //phân quyền thêm thành viên (tinh năng có thể phát triển)
+
+        // Kiểm tra quyền
         String role = requesterParticipant.getRole().name();
-        if (!role.equalsIgnoreCase("ADMIN") && !role.equalsIgnoreCase("MEMBER"))
+        if (!role.equalsIgnoreCase("admin") && !role.equalsIgnoreCase("member")) {
             throw new RuntimeException("Bạn không có quyền thêm thành viên");
+        }
 
-        List<Account> members = accountRepository.findAllById(newMemberIds);
-        if (members.isEmpty()) throw new RuntimeException("Không tìm thấy tài khoản hợp lệ nào");
+        // Load account từ danh sách ID
+        List<Account> newMembers = accountRepository.findAllById(newMemberIds);
+        if (newMembers.isEmpty()) {
+            throw new RuntimeException("Không có tài khoản hợp lệ nào");
+        }
 
-        //lấy hết
-        List<Participants> existingParticipants = participantRepository.findAllByConversation(conversation);
-        Set<Integer> existingAccountIds = existingParticipants.stream()
-                .map(p -> p.getAccount().getAccountId())
-                .collect(Collectors.toSet());
+        // Lấy ID đã tồn tại trong group nhưng chỉ trong newMemberIds
+        List<Integer> existingIds = participantRepository.findExistingAccountIds(
+                conversationId,
+                newMemberIds
+        );
+        Set<Integer> existingIdSet = new HashSet<>(existingIds);
 
-        // Lọc ra các account chưa có trong nhóm
-        List<Participants> newParticipants = members.stream()
-                .filter(acc -> !existingAccountIds.contains(acc.getAccountId()))
+        // Lọc ra những account chưa ở trong group
+        List<Participants> newParticipants = newMembers.stream()
+                .filter(acc -> !existingIdSet.contains(acc.getAccountId()))
                 .map(acc -> Participants.builder()
                         .conversation(conversation)
                         .account(acc)
@@ -184,17 +210,18 @@ public class ConversationServiceImp implements ConversationService {
                         .build())
                 .toList();
 
+        // Thêm vào DB
         if (!newParticipants.isEmpty()) {
             participantRepository.saveAll(newParticipants);
         }
 
-        conversationRepository.flush();
-
+        // Load lại conversation và participants
         Conversation updated = conversationRepository.findByIdWithParticipants(conversationId)
-                .orElseThrow(() -> new RuntimeException("Conversation not found"));
+                .orElseThrow(() -> new RuntimeException("lỗi tải lại đoạn hội thoai"));
 
         return mapToDTO(updated);
     }
+
     //lấy tất cả cuộc trò chuyện
     public Page<ContactResponseDTO> getAllConversation(int page, int size) {
         List<ContactResponseDTO> allContacts = new ArrayList<>();
@@ -271,7 +298,7 @@ public class ConversationServiceImp implements ConversationService {
             // Nếu đây là người cuối cùng, xóa luôn cả cuộc trò chuyện
             conversationRepository.delete(conversation);
         } else {
-            // Xử lý logic nếu người rời là ADMIN cuối cùng
+            // nếu người rời là admin cuối cùng
             boolean isRequesterAdmin = participant.getRole() == ParticipantRole.admin;
             long totalAdmins = allParticipants.stream()
                     .filter(p -> p.getRole() == ParticipantRole.admin)
@@ -294,6 +321,66 @@ public class ConversationServiceImp implements ConversationService {
             }
         }
     }
+
+    @Transactional
+    public ConversationDTO createPrivateConversation(String authorizationHeader, Integer friendId) {
+        Account requester = extractAccount(authorizationHeader);
+        if (requester == null) {
+            throw new RuntimeException("Unauthorized: Invalid token");
+        }
+
+        if (Objects.equals(requester.getAccountId(), friendId)) {
+            throw new RuntimeException("Không thể tạo đoạn chat với chính bạn.");
+        }
+
+        Account friend = accountRepository.findById(friendId)
+                .orElseThrow(() -> new RuntimeException("Người dùng không tồn tại"));
+
+        // Kiểm tra đoạn hội thoại đã tồn tại chưa
+        Conversation existing = conversationRepository.findPrivateConversationBetween(
+                requester.getAccountId(), friendId);
+
+        if (existing != null) {
+            // Load đầy đủ để trả về DTO
+            Conversation full = conversationRepository
+                    .findByIdWithParticipants(existing.getConversationId())
+                    .orElseThrow(() -> new RuntimeException("Không tải được đoạn chat private"));
+            return mapToDTO(full);
+        }
+
+        // Tạo mới cuộc trò chuyện Private
+        Conversation conversation = new Conversation();
+        conversation.setName(null);
+        conversation.setType(ConversationType.PRIVATE);
+        conversation.setCreatedBy(requester);
+        conversation.setCreatedAt(LocalDateTime.now());
+        conversation = conversationRepository.save(conversation);
+
+        // Thêm 2 participants
+        Participants p1 = Participants.builder()
+                .conversation(conversation)
+                .account(requester)
+                .role(ParticipantRole.member)
+                .build();
+
+        Participants p2 = Participants.builder()
+                .conversation(conversation)
+                .account(friend)
+                .role(ParticipantRole.member)
+                .build();
+
+        participantRepository.save(p1);
+        participantRepository.save(p2);
+
+        // Load lại dữ liệu đầy đủ
+        Conversation fullData = conversationRepository
+                .findByIdWithParticipants(conversation.getConversationId())
+                .orElseThrow(() -> new RuntimeException("Lỗi tải lại private chat"));
+
+        return mapToDTO(fullData);
+    }
+
+
 }
 
 

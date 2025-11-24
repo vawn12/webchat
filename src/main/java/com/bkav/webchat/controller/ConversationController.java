@@ -36,6 +36,14 @@ public class ConversationController {
         ConversationDTO dto = conversationService.createGroupConversation(token, name, participantIds);
         return ResponseEntity.ok(ApiResponse.success("Tạo nhóm thành công", dto));
     }
+    @PostMapping("/private/{friendId}")
+    public ResponseEntity<ApiResponse<ConversationDTO>> createPrivate(
+            @RequestHeader("Authorization") String authorization,
+            @PathVariable Integer friendId) {
+
+        ConversationDTO dto = conversationService.createPrivateConversation(authorization, friendId);
+        return ResponseEntity.ok(ApiResponse.success("Tạo đoạn chat riêng tư thành công", dto));
+    }
 
     @PostMapping("/{conversationId}/add_members")
     public ResponseEntity<ApiResponse<ConversationDTO>> addMembersToGroup(

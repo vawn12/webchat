@@ -7,6 +7,8 @@ import org.springframework.scheduling.annotation.EnableAsync;
 import org.springframework.scheduling.annotation.EnableScheduling;
 import org.springframework.transaction.annotation.EnableTransactionManagement;
 
+import java.util.TimeZone;
+
 @EntityScan("com.bkav.webchat.entity")
 @SpringBootApplication
 @EnableTransactionManagement
@@ -15,7 +17,7 @@ import org.springframework.transaction.annotation.EnableTransactionManagement;
 public class WebchatApplication {
 
     public static void main(String[] args) {
+        TimeZone.setDefault(TimeZone.getTimeZone("Asia/Ho_Chi_Minh"));
         SpringApplication.run(WebchatApplication.class, args);
     }
-
 }
