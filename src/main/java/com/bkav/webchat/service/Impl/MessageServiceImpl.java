@@ -1,10 +1,12 @@
 package com.bkav.webchat.service.Impl;
 
 import com.bkav.webchat.dto.ApiResponse;
+import com.bkav.webchat.dto.KafkaMessageEvent;
 import com.bkav.webchat.dto.MessageResponseDTO;
 import com.bkav.webchat.dto.request.ChatMessageRequest;
 import com.bkav.webchat.dto.request.ReactionRequest;
 import com.bkav.webchat.entity.*;
+import com.bkav.webchat.enumtype.Message_Status;
 import com.bkav.webchat.repository.*;
 import com.bkav.webchat.service.AccountService;
 import com.bkav.webchat.service.MessageService;
@@ -14,6 +16,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.*;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.ApplicationEventPublisher;
+import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -51,6 +54,10 @@ public class MessageServiceImpl implements MessageService {
     private MessageSearchRepository messageSearchRepository;
     @Autowired
     private ObjectMapper objectMapper;
+    @Autowired
+    private KafkaTemplate<String, Object> kafkaTemplate;
+
+    private static final String TOPIC_CHAT = "chat-events";
 
 
     @Getter
@@ -99,11 +106,11 @@ public class MessageServiceImpl implements MessageService {
     }
 
     //  Message → MessageStatus
-    private MessageStatus toMessageStatus(Message message, Account sender, String statusText) {
+    private MessageStatus toMessageStatus(Message message, Account sender,Message_Status messageStatus) {
         return MessageStatus.builder()
                 .message(message)
                 .account(sender)
-                .status(statusText)
+                .status(messageStatus)
                 .updatedAt(LocalDateTime.now())
                 .build();
     }
@@ -118,7 +125,7 @@ public class MessageServiceImpl implements MessageService {
         // Lấy sender từ username
         var sender = accountService.getAccountEntityByUsername(username);
         if (sender == null) {
-            return ApiResponse.fail("Không tìm thấy người gửi (user).");
+            return ApiResponse.fail("Không tìm thấy người gửi .");
         }
 
         // Tạo và lưu Message Entity
@@ -155,22 +162,41 @@ public class MessageServiceImpl implements MessageService {
         message = messageRepository.save(message);
 
         // Lưu MessageStatus
-        MessageStatus status = toMessageStatus(message, sender, "sent");
-        messageStatusRepository.save(status);
-        //lưu
+        MessageStatus senderStatus = MessageStatus.builder()
+                .message(message)
+                .account(sender)
+                .status(Message_Status.sent)
+                .updatedAt(LocalDateTime.now())
+                .build();
+        messageStatusRepository.save(senderStatus);
 
-        eventPublisher.publishEvent(new MessageSyncEvent(message, "SAVE"));
+        if (request.getReceiverId() != null) {
+            Account receiver = accountService.getAccountById(request.getReceiverId());
 
+            if (receiver != null) {
+                MessageStatus receiverStatus = MessageStatus.builder()
+                        .message(message)
+                        .account(receiver)
+                        .status(Message_Status.delivered)
+                        .updatedAt(LocalDateTime.now())
+                        .build();
+                messageStatusRepository.save(receiverStatus);
+            }
+        }
+
+        //kafka
         MessageResponseDTO dto = toDTO(message);
 
-        // Gửi real-time message qua WebSocket topic
-        var payload = Map.of(
-                "event", "MESSAGE_SENT",
-                "conversationId", conversationId,
-                "data", dto
-        );
-        messagingTemplate.convertAndSend("/topic/conversation/" + conversationId, payload);
+        KafkaMessageEvent event = KafkaMessageEvent.builder()
+                .eventType("MESSAGE_SENT")
+                .conversationId(conversationId)
+                .messageData(dto)
+                .build();
+        //lưu
 
+        kafkaTemplate.send(TOPIC_CHAT, String.valueOf(conversationId), event);
+
+        // Trả về kết quả ngay lập tức cho người dùng
         return ApiResponse.success("Gửi tin nhắn thành công.", dto);
     }
     //update
@@ -209,24 +235,27 @@ public class MessageServiceImpl implements MessageService {
         message.setUpdatedAt(LocalDateTime.now());
         Message updated = messageRepository.save(message);
 
-        eventPublisher.publishEvent(new MessageSyncEvent(updated, "SAVE"));
 
         MessageResponseDTO dto = toDTO(updated);
-        var payload = Map.of(
-                "event", "MESSAGE_UPDATE",
-                "conversationId", conversationId,
-                "data", Map.of(
-                        "messageId", updated.getMessageId(),
-                        "senderId", updated.getSender().getAccountId(),
-                        "content", updated.getContent(),
-                        "messageType", updated.getMessageType(),
-                        "updatedAt", updated.getUpdatedAt().toString()
-                )
+        Map<String, Object> socketData = Map.of(
+                "messageId", updated.getMessageId(),
+                "senderId", updated.getSender().getAccountId(),
+                "content", updated.getContent(),
+                "messageType", updated.getMessageType(),
+                "updatedAt", updated.getUpdatedAt().toString()
         );
 
-        messagingTemplate.convertAndSend("/topic/conversation/" + conversationId, payload);
 
-        return ApiResponse.success("Cập nhật tin nhắn thành công.", dto);
+        KafkaMessageEvent event = KafkaMessageEvent.builder()
+                .eventType("MESSAGE_UPDATE")
+                .conversationId(conversationId)
+                .messageData(dto)
+                .extraData(socketData)
+                .build();
+
+        kafkaTemplate.send(TOPIC_CHAT, String.valueOf(conversationId), event);
+
+        return ApiResponse.success("Cập nhật thành công.", dto);
     }
 
     // XÓA TIN NHẮN
@@ -262,16 +291,17 @@ public class MessageServiceImpl implements MessageService {
         }
 
         messageRepository.delete(message);
-        eventPublisher.publishEvent(new MessageSyncEvent(message, "DELETE"));
+        Map<String, Object> socketData = Map.of("messageId", request.getMessageId());
 
-        var payload = Map.of(
-                "event", "MESSAGE_DELETE",
-                "conversationId", conversationId,
-                "data", Map.of("messageId", request.getMessageId())
-        );
-        messagingTemplate.convertAndSend("/topic/conversation/" + conversationId, payload);
+        KafkaMessageEvent event = KafkaMessageEvent.builder()
+                .eventType("MESSAGE_DELETE")
+                .conversationId(conversationId)
+                .extraData(socketData) // Chỉ cần ID để FE xóa
+                .build();
 
-        return ApiResponse.success("Xóa tin nhắn thành công.", null);
+        kafkaTemplate.send(TOPIC_CHAT, String.valueOf(conversationId), event);
+
+        return ApiResponse.success("Xóa thành công.", null);
     }
 
     //thả react cho 1 message
@@ -334,17 +364,21 @@ public class MessageServiceImpl implements MessageService {
             action = "add";
         }
 
-        var payload = Map.of(
-                "event", "MESSAGE_REACT",
-                "conversationId", conversationId,
-                "data", Map.of(
-                        "messageId", request.getMessageId(),
-                        "accountId", user.getAccountId(),
-                        "reactionType", request.getReactionType(),
-                        "action", action
-                )
+        Map<String, Object> socketData = Map.of(
+                "messageId", request.getMessageId(),
+                "accountId", user.getAccountId(),
+                "reactionType", request.getReactionType(),
+                "action", action
         );
-        messagingTemplate.convertAndSend("/topic/conversation/" + conversationId, payload);
+
+        KafkaMessageEvent event = KafkaMessageEvent.builder()
+                .eventType("MESSAGE_REACT")
+                .conversationId(conversationId)
+                .extraData(socketData) // Dữ liệu reaction
+                .build();
+
+        kafkaTemplate.send(TOPIC_CHAT, String.valueOf(conversationId), event);
+
         return ApiResponse.success("Reaction xử lý thành công (" + action + ").", action);
 
     }
@@ -404,21 +438,24 @@ public class MessageServiceImpl implements MessageService {
                     .build();
 
             //Gửi realtime JSON
-            var payload = Map.of(
-                    "event", "FILE_SENT",
-                    "conversationId", conversationId,
-                    "data", Map.of(
-                            "messageId", message.getMessageId(),
-                            "sender", sender.getDisplayName(),
-                            "fileName", originalName,
-                            "fileUrl", "/uploads/" + storedName,
-                            "fileType", file.getContentType(),
-                            "fileSize", file.getSize(),
-                            "createdAt", message.getCreatedAt().toString()
-                    )
+            Map<String, Object> socketData = Map.of(
+                    "messageId", message.getMessageId(),
+                    "sender", sender.getDisplayName(),
+                    "fileName", originalName,
+                    "fileUrl", "/uploads/" + storedName,
+                    "fileType", file.getContentType(),
+                    "fileSize", file.getSize(),
+                    "createdAt", message.getCreatedAt().toString()
             );
 
-            messagingTemplate.convertAndSend("/topic/conversation/" + conversationId, payload);
+            KafkaMessageEvent event = KafkaMessageEvent.builder()
+                    .eventType("FILE_SENT")
+                    .conversationId(conversationId)
+                    .messageData(dto)
+                    .extraData(socketData)
+                    .build();
+
+            kafkaTemplate.send(TOPIC_CHAT, String.valueOf(conversationId), event);
 
             return ApiResponse.success("Gửi file thành công.", dto);
 
@@ -453,5 +490,27 @@ public class MessageServiceImpl implements MessageService {
 
 
         return ApiResponse.success("Tìm thấy " + results.size() + " kết quả.", results);
+    }
+    // Trong MessageServiceImpl.java
+
+    public ApiResponse<Void> markAsRead(Integer conversationId, String username) {
+        Account user = accountService.getAccountEntityByUsername(username);
+        if (user == null) return ApiResponse.fail("User not found");
+
+        // Tìm tất cả tin nhắn chưa đọc của user này trong conversation này
+        List<MessageStatus> unreadStatuses = messageStatusRepository.findUnreadStatuses(user.getAccountId(), conversationId);
+
+        if (!unreadStatuses.isEmpty()) {
+            // Update toàn bộ sang READ
+            for (MessageStatus status : unreadStatuses) {
+                status.setStatus(Message_Status.read);
+                status.setUpdatedAt(LocalDateTime.now());
+            }
+            messageStatusRepository.saveAll(unreadStatuses);
+
+            // Gửi socket báo cho user kia biết là "đã xem" (Optional)
+        }
+
+        return ApiResponse.success("Đã đánh dấu đã đọc", null);
     }
 }

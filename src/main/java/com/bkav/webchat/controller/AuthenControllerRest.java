@@ -1,10 +1,6 @@
 package com.bkav.webchat.controller;
 
-import com.bkav.webchat.cache.RedisService;
 import com.bkav.webchat.dto.*;
-import com.bkav.webchat.dto.m.AccountDTO;
-import com.bkav.webchat.dto.m.ForgotPasswordDTO;
-import com.bkav.webchat.dto.m.VerifyTokenDTO;
 import com.bkav.webchat.dto.request.ForgotRequest;
 import com.bkav.webchat.dto.request.LoginRequest;
 import com.bkav.webchat.dto.request.RegisterRequest;
@@ -12,18 +8,14 @@ import com.bkav.webchat.dto.request.ResetPasswordRequest;
 import com.bkav.webchat.enumtype.Account_status;
 import com.bkav.webchat.service.AccountService;
 import com.bkav.webchat.service.AuthService;
-import com.bkav.webchat.service.EmailService;
-import com.bkav.webchat.service.VerifyTokenService;
-import com.bkav.webchat.service.Impl.ForgotService;
-//import io.swagger.v3.oas.annotations.Operation;
-//import io.swagger.v3.oas.annotations.tags.Tag;
-import com.nimbusds.openid.connect.sdk.LogoutRequest;
+
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
+import java.security.Principal;
 import java.util.*;
 
 @RestController
@@ -34,6 +26,21 @@ public class AuthenControllerRest {
 
     private final AuthService authService;
 
+    @Value("${spring.security.oauth2.client.registration.google.client-id}")
+    private String googleClientId;
+    //login with google
+    @PostMapping("/login-google")
+    public ResponseEntity<ApiResponse<?>> loginWithGoogle(@RequestBody Map<String, String> request) {
+        String token = request.get("token");
+        String fcmToken = request.get("fcmToken");
+        return authService.loginWithGoogle(token, googleClientId, fcmToken);
+    }
+    @PostMapping("/registerDevice")
+    public ResponseEntity<ApiResponse<?>> registerDeviceToken(@RequestBody Map<String, String> request, Principal principal) {
+        String fcmToken = request.get("token");
+        authService.saveDeviceToken(principal.getName(), fcmToken);
+        return ResponseEntity.ok(ApiResponse.success("Lưu token thiết bị thành công", null));
+    }
     @PostMapping("/login")
     public ResponseEntity<ApiResponse<?>> login(@RequestBody LoginRequest request) {
         return authService.login(request);

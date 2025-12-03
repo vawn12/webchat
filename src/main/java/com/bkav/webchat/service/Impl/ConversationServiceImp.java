@@ -4,6 +4,7 @@ import com.bkav.webchat.dto.ContactResponseDTO;
 import com.bkav.webchat.dto.m.ConversationDTO;
 import com.bkav.webchat.dto.m.ParticipantDTO;
 import com.bkav.webchat.entity.*;
+import com.bkav.webchat.enumtype.ContactStatus;
 import com.bkav.webchat.enumtype.ConversationType;
 import com.bkav.webchat.enumtype.ParticipantRole;
 import com.bkav.webchat.repository.*;
@@ -16,6 +17,7 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.TransactionDefinition;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
@@ -38,6 +40,10 @@ public class ConversationServiceImp implements ConversationService {
     private MessageRepository messageRepository;
     @Autowired
     private UserContactRepository userContactRepository;
+    @Autowired
+    private MessageStatusRepository messageStatusRepository;
+    @Autowired
+    private TransactionDefinition transactionDefinition;
 
 
     public List<ConversationDTO> getConversationsByType(String authorizationHeader, String type) {
@@ -73,8 +79,10 @@ public class ConversationServiceImp implements ConversationService {
         );
         return dto;
     }
-    private ContactResponseDTO mapGroupToDTO(Conversation c) {
+
+    private ContactResponseDTO mapGroupToDTO(Conversation c, Integer currentUserId) {
         Message lastMsg = messageRepository.findTopByConversation_ConversationIdOrderByCreatedAtDesc(c.getConversationId());
+        long unread = messageStatusRepository.countUnreadMessages(currentUserId, c.getConversationId());
         return ContactResponseDTO.builder()
                 .id(c.getConversationId())
                 .type("group")
@@ -82,19 +90,24 @@ public class ConversationServiceImp implements ConversationService {
                 .avatarUrl("/uploads/groups/" + c.getConversationId() + ".png")
                 .lastMessage(lastMsg != null ? lastMsg.getContent() : null)
                 .lastMessageAt(lastMsg != null ? lastMsg.getCreatedAt() : c.getCreatedAt())
+                .unreadCount(unread)
                 .build();
     }
 
-    private ContactResponseDTO mapPrivateToDTO(UserContact uc) {
+    private ContactResponseDTO mapPrivateToDTO(UserContact uc, Integer currentUserId) {
         Account friend = uc.getContactUser();
         Conversation privateConv = conversationRepository.findPrivateConversationBetween(
                 uc.getOwner().getAccountId(), friend.getAccountId());
+        long unread = 0;
+        Integer conversationId = uc.getContactId();
         Message lastMsg = null;
-        if (privateConv != null)
+        if (privateConv != null) {
+            conversationId = privateConv.getConversationId();
             lastMsg = messageRepository.findTopByConversation_ConversationIdOrderByCreatedAtDesc(privateConv.getConversationId());
-
+            unread = messageStatusRepository.countUnreadMessages(currentUserId, conversationId);
+        }
         return ContactResponseDTO.builder()
-                .id(privateConv != null ? privateConv.getConversationId() : uc.getContactId())
+                .id(conversationId)
                 .type("private")
                 .contactUserId(friend.getAccountId())
                 .contactUserName(friend.getDisplayName())
@@ -102,8 +115,10 @@ public class ConversationServiceImp implements ConversationService {
                 .userStatus(friend.getStatus().name())
                 .lastMessage(lastMsg != null ? lastMsg.getContent() : null)
                 .lastMessageAt(lastMsg != null ? lastMsg.getCreatedAt() : uc.getCreatedAt())
+                .unreadCount(unread)
                 .build();
     }
+
     @Override
     @Transactional
     public ConversationDTO createGroupConversation(String authorizationHeader, String name, List<Integer> participantIds) {
@@ -223,32 +238,43 @@ public class ConversationServiceImp implements ConversationService {
     }
 
     //lấy tất cả cuộc trò chuyện
-    public Page<ContactResponseDTO> getAllConversation(int page, int size) {
+    public Page<ContactResponseDTO> getAllConversation(String token, int page, int size) {
+        // Xác thực User
+        Account currentUser = extractAccount(token);
+        if (currentUser == null) {
+            throw new RuntimeException("Unauthorized: Invalid token");
+        }
+        Integer userId = currentUser.getAccountId();
+
         List<ContactResponseDTO> allContacts = new ArrayList<>();
-        //  Nhóm
-        List<Conversation> groups = conversationRepository.findAllByType(ConversationType.GROUP);
+
+        // Lấy danh sách NHÓM mà user tham gia
+        List<Conversation> groups = participantRepository.findConversationsByAccountId(userId);
         allContacts.addAll(groups.stream()
-                .map(this::mapGroupToDTO)
-                .collect(Collectors.toList()));
-        //  Bạn bè
-        List<UserContact> contacts = userContactRepository.findAllAccepted();
-        allContacts.addAll(contacts.stream()
-                .map(this::mapPrivateToDTO)
+                .map(g -> mapGroupToDTO(g, userId)) // Truyền userId vào để đếm unread
                 .collect(Collectors.toList()));
 
-        // Sắp xếp theo thời gian tin nhắn mới nhất
+        //  Lấy danh sách BẠN BÈ (Private)
+        List<UserContact> contacts = userContactRepository.findAllAcceptedByAccountId(userId);
+        allContacts.addAll(contacts.stream()
+                .map(c -> mapPrivateToDTO(c, userId)) // Truyền userId vào để đếm unread
+                .collect(Collectors.toList()));
+
+        // Tin nhắn mới nhất lên đầu
         allContacts.sort(Comparator.comparing(
-                (ContactResponseDTO dto) -> Optional.ofNullable(dto.getLastMessageAt()).orElse(dto.getLastMessageAt())
+                (ContactResponseDTO dto) -> dto.getLastMessageAt()
         ).reversed());
 
-        int start = Math.min(page * size, allContacts.size());
-        int end = Math.min(start + size, allContacts.size());
-        List<ContactResponseDTO> paged = allContacts.subList(start, end);
+        // Phân trang thủ công trên List đã gộp
+        int totalElements = allContacts.size();
+        int start = Math.min(page * size, totalElements);
+        int end = Math.min(start + size, totalElements);
+        List<ContactResponseDTO> pagedList = allContacts.subList(start, end);
 
-        return new PageImpl<>(paged, PageRequest.of(page, size), allContacts.size());
+        return new PageImpl<>(pagedList, PageRequest.of(page, size), totalElements);
     }
-// Trong file ConversationServiceImp.java
 
+    //lay chi tiết danh sách đoạn chat
     @Override
     @Transactional(readOnly = true)
     public ConversationDTO getConversationDetails(String authorizationHeader, Integer conversationId) {
@@ -257,7 +283,7 @@ public class ConversationServiceImp implements ConversationService {
             throw new RuntimeException("Unauthorized: Invalid token");
         }
 
-        Conversation conversation = conversationRepository.findByIdWithParticipants(conversationId) // <-- Sửa ở đây
+        Conversation conversation = conversationRepository.findByIdWithParticipants(conversationId)
                 .orElseThrow(() -> new RuntimeException("Conversation not found"));
 
 
@@ -269,7 +295,7 @@ public class ConversationServiceImp implements ConversationService {
         return mapToDTO(conversation);
     }
 
-
+//rơi nhóm
     @Override
     @Transactional
     public void leaveGroup(String authorizationHeader, Integer conversationId) {
@@ -321,7 +347,7 @@ public class ConversationServiceImp implements ConversationService {
             }
         }
     }
-
+//tạo cuộc trò chuyện riêng tu đồng thời kết bạn
     @Transactional
     public ConversationDTO createPrivateConversation(String authorizationHeader, Integer friendId) {
         Account requester = extractAccount(authorizationHeader);
@@ -335,7 +361,7 @@ public class ConversationServiceImp implements ConversationService {
 
         Account friend = accountRepository.findById(friendId)
                 .orElseThrow(() -> new RuntimeException("Người dùng không tồn tại"));
-
+        ensureDualContactRelationship(requester, friend);
         // Kiểm tra đoạn hội thoại đã tồn tại chưa
         Conversation existing = conversationRepository.findPrivateConversationBetween(
                 requester.getAccountId(), friendId);
@@ -356,22 +382,6 @@ public class ConversationServiceImp implements ConversationService {
         conversation.setCreatedAt(LocalDateTime.now());
         conversation = conversationRepository.save(conversation);
 
-        // Thêm 2 participants
-        Participants p1 = Participants.builder()
-                .conversation(conversation)
-                .account(requester)
-                .role(ParticipantRole.member)
-                .build();
-
-        Participants p2 = Participants.builder()
-                .conversation(conversation)
-                .account(friend)
-                .role(ParticipantRole.member)
-                .build();
-
-        participantRepository.save(p1);
-        participantRepository.save(p2);
-
         // Load lại dữ liệu đầy đủ
         Conversation fullData = conversationRepository
                 .findByIdWithParticipants(conversation.getConversationId())
@@ -379,8 +389,31 @@ public class ConversationServiceImp implements ConversationService {
 
         return mapToDTO(fullData);
     }
+//hàm trợ giup lưu
+    private void ensureDualContactRelationship(Account user1, Account user2) {
+        saveOrUpdateContactStatus(user1, user2);
+        saveOrUpdateContactStatus(user2, user1);
+    }
 
+    private void saveOrUpdateContactStatus(Account owner, Account contactUser) {
+        Optional<UserContact> existingOpt = userContactRepository.findByOwnerAndContactUser(owner, contactUser);
 
+        if (existingOpt.isPresent()) {
+            UserContact existing = existingOpt.get();
+            if (existing.getStatus() != ContactStatus.accepted) {
+                existing.setStatus(ContactStatus.accepted);
+                userContactRepository.save(existing);
+            }
+        } else {
+            // Nếu chưa có -> Tạo mới ACCEPTED
+            UserContact newContact = UserContact.builder()
+                    .owner(owner)
+                    .contactUser(contactUser)
+                    .status(ContactStatus.accepted)
+                    .createdAt(LocalDateTime.now())
+                    .build();
+            userContactRepository.save(newContact);
+        }
+    }
 }
-
 

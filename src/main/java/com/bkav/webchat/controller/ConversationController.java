@@ -56,10 +56,10 @@ public class ConversationController {
     }
     @GetMapping("")
     public ResponseEntity<Map<String, Object>> getConversations(
+            @RequestHeader(HttpHeaders.AUTHORIZATION) String token,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "10") int size) {
-        Page<ContactResponseDTO> contacts = conversationService.getAllConversation(page, size);
-
+        Page<ContactResponseDTO> contacts = conversationService.getAllConversation(token,page, size);
         Map<String, Object> response = new LinkedHashMap<>();
         response.put("status", 1);
         response.put("message", "Lấy danh sách chat thành công.");

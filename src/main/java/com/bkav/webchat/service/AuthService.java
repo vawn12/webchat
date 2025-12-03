@@ -15,4 +15,6 @@ public interface AuthService {
     ResponseEntity<ApiResponse<?>> resetPassword(ResetPasswordRequest request);
     ResponseEntity<ApiResponse<?>> logout(String authHeader);
     ResponseEntity<ApiResponse<?>> refresh(String refreshToken);
+    ResponseEntity<ApiResponse<?>> loginWithGoogle(String googleToken, String clientId,String fcmToken);
+    void saveDeviceToken(String username, String fcmToken);
 }

@@ -16,4 +16,5 @@ public interface AccountService {
     List<Account> getAllAccount ();
     Account getAccountEntityByUsername(String username);
     List<Account> findByKeyword(String keyword);
+    Account getAccountById(Integer id);
 }

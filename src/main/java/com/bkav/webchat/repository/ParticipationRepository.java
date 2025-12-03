@@ -6,11 +6,12 @@ import com.bkav.webchat.entity.Participants;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
+import org.springframework.stereotype.Repository;
 
 import java.util.List;
 import java.util.Optional;
 
-
+@Repository
 public interface ParticipationRepository extends JpaRepository<Participants, Long> {
     List<Participants> findByConversation_ConversationId(Long conversationId);
     Optional<Participants> findByConversationAndAccount(Conversation conversation, Account account);
@@ -37,4 +38,13 @@ public interface ParticipationRepository extends JpaRepository<Participants, Lon
             @Param("conversationId") Integer conversationId,
             @Param("accountId") Integer accountId
     );
+    @Query("SELECT p.account.accountId FROM Participants p " +
+            "WHERE p.conversation.conversationId = :conversationId " +
+            "AND p.account.accountId <> :senderId")
+    List<Integer> findUserIdsByConversationIdExcludingSender(
+            @Param("conversationId") Integer conversationId,
+            @Param("senderId") Integer senderId
+    );
+    @Query("SELECT p.conversation FROM Participants p WHERE p.account.accountId = :accountId AND p.conversation.type = 'GROUP'")
+    List<Conversation> findConversationsByAccountId(@Param("accountId") Integer accountId);
 }

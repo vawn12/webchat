@@ -1,5 +1,6 @@
 package com.bkav.webchat.entity;
 
+import com.bkav.webchat.enumtype.Message_Status;
 import jakarta.persistence.*;
 import lombok.*;
 import java.time.LocalDateTime;
@@ -15,7 +16,7 @@ public class MessageStatus {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     @Column(name = "status_id")
-    private Long statusId;
+    private Integer statusId;
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "message_id", nullable = false)
@@ -24,9 +25,9 @@ public class MessageStatus {
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "account_id", nullable = false)
     private Account account;
-
+    @Enumerated(EnumType.STRING)
     @Column(name = "status", length = 20)
-    private String status = "sent";
+    private Message_Status status;
 
     @Column(name = "updated_at")
     private LocalDateTime updatedAt;

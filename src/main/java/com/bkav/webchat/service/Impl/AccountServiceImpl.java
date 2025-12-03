@@ -124,11 +124,14 @@ public class AccountServiceImpl implements AccountService {
     public List<Account> getAllAccount (){
         return accountRepository.findAll();
     }
+    public Account getAccountById(Integer id) {
+        return accountRepository.findById(id).orElse(null);
+    }
 
     @Override
     public List<Account> findByKeyword(String keyword) {
         if (keyword == null || keyword.trim().isEmpty()) {
-            return accountRepository.findAll(); // Nếu không nhập từ khóa thì trả toàn bộ
+            return accountRepository.findAll();
         }
         return accountRepository.searchAccounts(keyword.trim());
     }

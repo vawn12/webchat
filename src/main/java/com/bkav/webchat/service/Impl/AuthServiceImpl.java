@@ -4,14 +4,25 @@ import com.bkav.webchat.cache.RedisService;
 import com.bkav.webchat.dto.*;
 import com.bkav.webchat.dto.m.*;
 import com.bkav.webchat.dto.request.*;
+import com.bkav.webchat.entity.Account;
+import com.bkav.webchat.entity.UserDeviceToken;
 import com.bkav.webchat.enumtype.Account_status;
+import com.bkav.webchat.repository.AccountRepository;
+import com.bkav.webchat.repository.UserDeviceTokenRepository;
 import com.bkav.webchat.security.JwtService;
 import com.bkav.webchat.service.*;
+import com.google.api.client.googleapis.auth.oauth2.GoogleIdToken;
+import com.google.api.client.googleapis.auth.oauth2.GoogleIdTokenVerifier;
+import com.google.api.client.http.javanet.NetHttpTransport;
+import com.google.api.client.json.gson.GsonFactory;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.*;
+import org.springframework.security.core.userdetails.UsernameNotFoundException;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+import java.time.LocalDateTime;
 
 import java.util.*;
 
@@ -24,6 +35,8 @@ public class AuthServiceImpl implements AuthService {
     private final EmailService emailService;
     private final VerifyTokenService verifyTokenService;
     private final RedisService redisService;
+    private final AccountRepository accountRepository;
+    private final UserDeviceTokenRepository userDeviceTokenRepository;
 
     @Value("${app.base-url}")
     private String baseUrl;
@@ -34,7 +47,9 @@ public class AuthServiceImpl implements AuthService {
         if (account == null)
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
                     .body(ApiResponse.fail("Sai tên tài khoản hoặc mật khẩu"));
-
+        if (request.getFcmToken() != null && !request.getFcmToken().isEmpty()) {
+            saveDeviceToken(account.getUsername(), request.getFcmToken());
+        }
         String accessToken = jwtService.generateAccessToken(account.getUsername());
         String refreshToken = jwtService.generateRefreshToken(account.getUsername());
 
@@ -209,7 +224,96 @@ public class AuthServiceImpl implements AuthService {
 
         return ResponseEntity.ok(ApiResponse.success("Làm mới token thành công.", data));
     }
+    //đăng nhập bằng google
+    @Override
+    public ResponseEntity<ApiResponse<?>> loginWithGoogle(String googleToken, String clientId,String fcmToken) {
+        try {
+            // Verify Token với Google
+            GoogleIdTokenVerifier verifier = new GoogleIdTokenVerifier.Builder(new NetHttpTransport(), new GsonFactory())
+                    .setAudience(Collections.singletonList(clientId))
+                    .build();
 
+            GoogleIdToken idToken = verifier.verify(googleToken);
+            if (idToken == null) {
+                return ResponseEntity.badRequest().body(ApiResponse.fail("Token Google không hợp lệ"));
+            }
+            // Lấy thông tin
+            GoogleIdToken.Payload payload = idToken.getPayload();
+            String email = payload.getEmail();
+            String name = (String) payload.get("name");
+            String pictureUrl = (String) payload.get("picture");
+
+            // Tìm hoặc Tạo User
+            Account account = accountRepository.findByEmail(email).orElse(null);
+            if (account == null) {
+            String baseUsername = email.split("@")[0];
+            String finalUsername = baseUsername;
+            int suffix = 1;
+            while (accountRepository.existsByUsername(finalUsername)) {
+                // Nếu trùng thì thêm số đằng sau
+                finalUsername = baseUsername + "_" + suffix;
+                suffix++;
+            }
+                account = new Account();
+                account.setEmail(email);
+                account.setDisplayName(name);
+                account.setAvatarUrl(pictureUrl);
+                account.setStatus(Account_status.online);
+                account.setPasswordHash("");
+
+                account.setUsername(finalUsername);
+                account = accountRepository.save(account);
+            }
+            if (fcmToken != null && !fcmToken.isEmpty()) {
+                saveDeviceToken(account.getUsername(), fcmToken);
+            }
+            //  Tạo JWT
+            String accessToken = jwtService.generateAccessToken(account);
+            String refreshToken = jwtService.generateRefreshToken(account);
+
+            //  Trả về kết quả
+
+            Map<String, Object> data = new HashMap<>();
+            data.put("accessToken", accessToken);
+            data.put("refreshToken", refreshToken);
+            data.put("userId", account.getAccountId());
+            data.put("username", account.getDisplayName());
+            data.put("avatarUrl", account.getAvatarUrl());
+
+            return ResponseEntity.ok(ApiResponse.success("Đăng nhập Google thành công", data));
+
+        } catch (Exception e) {
+            e.printStackTrace();
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(ApiResponse.fail("Lỗi xác thực Google: " + e.getMessage()));
+        }
+    }
+//	lưu token của thiết bị được đăng nhập
+    public void saveDeviceToken(String username, String fcmToken) {
+        //  Lấy thông tin người dùng đang đăng nhập
+        Account currentUser = accountRepository.findByUsername(username)
+                .orElseThrow(() -> new UsernameNotFoundException("User not found"));
+
+        //  Kiểm tra token này đã có trong DB chưa
+        Optional<UserDeviceToken> existingTokenOpt = userDeviceTokenRepository.findByToken(fcmToken);
+        if (existingTokenOpt.isPresent()) {
+            // case: Token đã tồn tại (Thiết bị này đã từng đăng nhập)
+            UserDeviceToken existingToken = existingTokenOpt.get();
+            // Cập nhật lại Account là người dùng hiện tại
+            existingToken.setAccount(currentUser);
+            // Cập nhật thời gian để biết token còn hoạt động
+            existingToken.setLastUpdated(LocalDateTime.now());
+            userDeviceTokenRepository.save(existingToken);
+        } else {
+            // TRƯỜNG HỢP: Token mới hoàn toàn -> Tạo mới
+            UserDeviceToken newToken = UserDeviceToken.builder()
+                    .token(fcmToken)
+                    .account(currentUser)
+                    .lastUpdated(LocalDateTime.now())
+                    .build();
+            userDeviceTokenRepository.save(newToken);
+        }
+    }
 
     private String generateOtp() {
         Random rand = new Random();

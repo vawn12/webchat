@@ -10,6 +10,7 @@ import java.util.List;
 import java.util.Optional;
 @Repository
 public interface AccountRepository extends JpaRepository<Account,Integer> {
+//    getAccountById
     Optional<Account> findByUsername(String username);
 
     Optional<Account> findByEmail(String email);
@@ -21,5 +22,6 @@ public interface AccountRepository extends JpaRepository<Account,Integer> {
             "WHERE LOWER(a.displayName) LIKE LOWER(CONCAT('%', :keyword, '%')) " +
             "   OR LOWER(a.username) LIKE LOWER(CONCAT('%', :keyword, '%'))")
     List<Account> searchAccounts(@Param("keyword") String keyword);
-
+    boolean existsByUsername(String username);
+    Account findByAccountId(Integer accountId);
 }

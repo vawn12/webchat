@@ -25,4 +25,5 @@ public class ContactResponseDTO {
     //Tin nhắn cuối
     private String lastMessage;
     private LocalDateTime lastMessageAt;
+    private Long unreadCount;
 }
