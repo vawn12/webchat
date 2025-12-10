@@ -27,8 +27,21 @@ public class EmailServiceImp implements EmailService {
             helper.setTo(to);
             helper.setSubject(subject);
             helper.setText(content, true);
-            helper.addInline("logo", new ClassPathResource("static/customer-static/images/bkav.png"));
+
+
+            String pathImage = "static/images/bkav.png";
+            ClassPathResource imageResource = new ClassPathResource(pathImage);
+
+            // Kiểm tra xem file có thật sự tồn tại trong Docker không
+            if (imageResource.exists()) {
+                helper.addInline("logo", imageResource);
+            } else {
+
+                System.err.println("Không tìm thấy file ảnh tại: " + pathImage);
+            }
+
         } catch (Exception e) {
+            System.err.println(" Lỗi gửi mail: " + e.getMessage());
             e.printStackTrace();
         }
         mailSender.send(message);

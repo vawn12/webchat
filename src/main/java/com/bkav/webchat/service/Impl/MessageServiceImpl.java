@@ -24,14 +24,14 @@ import org.springframework.web.multipart.MultipartFile;
 
 import java.io.File;
 import java.time.LocalDateTime;
-import java.util.List;
-import java.util.Map;
-import java.util.Optional;
+import java.util.*;
 import java.util.stream.Collectors;
 
 @Service
 
 public class MessageServiceImpl implements MessageService {
+    @Autowired
+    private UserContactRepository userContactRepository;
     @Autowired
     private MessageRepository messageRepository;
     @Autowired
@@ -466,32 +466,50 @@ public class MessageServiceImpl implements MessageService {
     }
 
 
+    @Override
     public ApiResponse<List<MessageDocument>> searchMessages(String query, String username) {
-
-        // Lấy thông tin người dùng
+        // Lấy thông tin người dùng hiện tại
         Account currentUser = accountService.getAccountEntityByUsername(username);
         if (currentUser == null) {
             return ApiResponse.fail("Không tìm thấy người dùng.");
         }
+        Integer currentUserId = currentUser.getAccountId();
 
-        // Lấy danh sách các cuộc trò chuyện user được phép xem
-        List<Integer> userConversationIds = participationRepository
-                .findAllByAccount_AccountId(currentUser.getAccountId())
+        // Tạo một Set để chứa tất cả ID cuộc trò chuyện
+        Set<Integer> allConversationIds = new HashSet<>();
+
+        // LẤY ID CỦA CÁC NHÓM CHAT
+        List<Integer> groupIds = participationRepository
+                .findAllByAccount_AccountId(currentUserId)
                 .stream()
                 .map(participant -> participant.getConversation().getConversationId())
                 .collect(Collectors.toList());
+        allConversationIds.addAll(groupIds);
 
-        if (userConversationIds.isEmpty()) {
-            return ApiResponse.success("Không tìm thấy kết quả.", List.of());
+        // Lấy danh sách bạn bè đã accept
+        List<UserContact> contacts = userContactRepository.findAllAcceptedByAccountId(currentUserId);
+
+        for (UserContact contact : contacts) {
+            // Với mỗi người bạn, tìm xem đã có cuộc trò chuyện private chưa
+            Conversation privateConv = conversationRepository.findPrivateConversationBetween(
+                    currentUserId,
+                    contact.getContactUser().getAccountId()
+            );
+
+            if (privateConv != null) {
+                allConversationIds.add(privateConv.getConversationId());
+            }
         }
 
-        List<MessageDocument> results =
-                messageSearchRepository.findByContentContainingAndConversationIdIn(query, userConversationIds);
-
-
+        //Nếu không thì trả về rỗng
+        if (allConversationIds.isEmpty()) {
+            return ApiResponse.success("Không tìm thấy kết quả.", List.of());
+        }
+        // Tìm kiếm trong Elasticsearch với danh sách ID tổng hợp
+        List<MessageDocument> results = messageSearchRepository.findByContentContainingAndConversationIdIn(query, new ArrayList<>(allConversationIds));
         return ApiResponse.success("Tìm thấy " + results.size() + " kết quả.", results);
     }
-    // Trong MessageServiceImpl.java
+
 
     public ApiResponse<Void> markAsRead(Integer conversationId, String username) {
         Account user = accountService.getAccountEntityByUsername(username);
@@ -508,7 +526,7 @@ public class MessageServiceImpl implements MessageService {
             }
             messageStatusRepository.saveAll(unreadStatuses);
 
-            // Gửi socket báo cho user kia biết là "đã xem" (Optional)
+            // Gửi socket báo cho user kia biết là "đã xem"
         }
 
         return ApiResponse.success("Đã đánh dấu đã đọc", null);

@@ -96,7 +96,6 @@ public class ChatController {
         if (!response.isSuccess()) {
             return ResponseEntity.badRequest().body(response);
         }
-
         return ResponseEntity.ok(response);
     }
 }

@@ -1,0 +1,38 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: elasticsearch-service
+spec:
+  selector:
+    app: elasticsearch
+  ports:
+    - port: 9200
+      targetPort: 9200
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: elasticsearch
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: elasticsearch
+  template:
+    metadata:
+      labels:
+        app: elasticsearch
+    spec:
+      containers:
+      - name: elasticsearch
+        image: docker.elastic.co/elasticsearch/elasticsearch:8.11.1
+        ports:
+        - containerPort: 9200
+        env:
+        # Cấu hình chạy 1 node đơn giản (tiết kiệm RAM)
+        - name: discovery.type
+          value: "single-node"
+        - name: xpack.security.enabled
+          value: "false" # Tắt bảo mật để kết nối cho dễ (chỉ dùng nội bộ)
+        - name: ES_JAVA_OPTS
+          value: "-Xms512m -Xmx512m" # Giới hạn RAM ko nó ăn hết của máy

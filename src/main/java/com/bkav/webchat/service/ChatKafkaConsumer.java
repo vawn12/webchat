@@ -54,8 +54,15 @@ public class ChatKafkaConsumer {
                 case "MESSAGE_UPDATE":
                     if (event.getMessageData() != null) {
                         MessageDocument doc = toDocument(event.getMessageData());
-                        messageSearchRepository.save(doc);
-                        System.out.println(" Đã sync messageId " + doc.getMessageId() + " vào ES.");
+
+                        // SỬA ĐOẠN NÀY: Hứng kết quả trả về từ hàm save
+                        MessageDocument savedDoc = messageSearchRepository.save(doc);
+
+                        System.out.println("======== DEBUG ELASTICSEARCH ========");
+                        System.out.println("Original Message ID: " + doc.getMessageId());
+                        // Nếu savedDoc.getMessageId() null hoặc khác ID gốc => Thiếu @Id
+                        System.out.println("Saved ID in ES: " + savedDoc.getMessageId());
+                        System.out.println("=====================================");
                     }
                     break;
 

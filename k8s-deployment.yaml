@@ -1,0 +1,54 @@
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: webchat-deployment
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: webchat
+  template:
+    metadata:
+      labels:
+        app: webchat
+    spec:
+      containers:
+      - name: webchat-container
+        image: vannguyen23/webchat-backend:v6
+        ports:
+        - containerPort: 8081
+        # Cấu hình biến môi trường để kết nối DB và Kafka
+        env:
+        - name: SPRING_DATASOURCE_URL
+          value: "jdbc:postgresql://postgres-service:5432/webchat" # Địa chỉ DB trong K8s
+        - name: SPRING_DATASOURCE_USERNAME
+          value: "postgres"
+        - name: SPRING_DATASOURCE_PASSWORD
+          value: "sa123"
+        - name: SPRING_KAFKA_BOOTSTRAP_SERVERS
+          value: "kafka-service:9092" # Địa chỉ Kafka trong K8s
+        - name: SPRING_JPA_HIBERNATE_DDL_AUTO
+          value: "update"
+        - name: SPRING_ELASTICSEARCH_URIS
+          value: "http://elasticsearch-service:9200"
+        - name: SPRING_DATA_REDIS_HOST
+          value: "redis-service"
+        - name: SPRING_DATA_REDIS_PORT
+          value: "6379"
+
+---
+
+# Mở cổng để người dùng truy cập
+apiVersion: v1
+kind: Service
+metadata:
+  name: webchat-service
+spec:
+  type: LoadBalancer # Hoặc NodePort nếu chạy local (Minikube)
+  selector:
+    app: webchat
+  ports:
+    - protocol: TCP
+      port: 80       # Cổng bên ngoài (User gọi vào)
+      targetPort: 8081 # Cổng của Container Spring Boot

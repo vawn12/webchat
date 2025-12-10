@@ -251,13 +251,13 @@ public class ConversationServiceImp implements ConversationService {
         // Lấy danh sách NHÓM mà user tham gia
         List<Conversation> groups = participantRepository.findConversationsByAccountId(userId);
         allContacts.addAll(groups.stream()
-                .map(g -> mapGroupToDTO(g, userId)) // Truyền userId vào để đếm unread
+                .map(g -> mapGroupToDTO(g, userId))
                 .collect(Collectors.toList()));
 
         //  Lấy danh sách BẠN BÈ (Private)
         List<UserContact> contacts = userContactRepository.findAllAcceptedByAccountId(userId);
         allContacts.addAll(contacts.stream()
-                .map(c -> mapPrivateToDTO(c, userId)) // Truyền userId vào để đếm unread
+                .map(c -> mapPrivateToDTO(c, userId))
                 .collect(Collectors.toList()));
 
         // Tin nhắn mới nhất lên đầu
@@ -382,6 +382,19 @@ public class ConversationServiceImp implements ConversationService {
         conversation.setCreatedAt(LocalDateTime.now());
         conversation = conversationRepository.save(conversation);
 
+        Participants p1 = Participants.builder()
+                .conversation(conversation)
+                .account(requester)
+                .role(ParticipantRole.member)
+                .build();
+
+        Participants p2 = Participants.builder()
+                .conversation(conversation)
+                .account(friend)
+                .role(ParticipantRole.member)
+                .build();
+
+        participantRepository.saveAll(List.of(p1, p2));
         // Load lại dữ liệu đầy đủ
         Conversation fullData = conversationRepository
                 .findByIdWithParticipants(conversation.getConversationId())
