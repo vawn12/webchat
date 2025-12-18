@@ -1,7 +1,7 @@
 package com.bkav.webchat.service;
 
-import com.bkav.webchat.dto.ApiResponse;
-import com.bkav.webchat.dto.MessageResponseDTO;
+import com.bkav.webchat.dto.response.ApiResponse;
+import com.bkav.webchat.dto.response.MessageResponseDTO;
 import com.bkav.webchat.dto.request.ChatMessageRequest;
 import com.bkav.webchat.dto.request.ReactionRequest;
 import com.bkav.webchat.entity.MessageDocument;
@@ -16,4 +16,5 @@ public interface MessageService {
     ApiResponse<String> reactToMessage(Integer conversationId, ReactionRequest request, String username);
     ApiResponse<MessageResponseDTO> uploadAttachment(Integer conversationId, MultipartFile file, String username);
     ApiResponse<List<MessageDocument>> searchMessages(String query, String username);
+    ApiResponse<Void> markAsRead(Integer conversationId, String username);
 }

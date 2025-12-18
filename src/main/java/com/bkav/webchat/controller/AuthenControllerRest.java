@@ -1,17 +1,14 @@
 package com.bkav.webchat.controller;
 
-import com.bkav.webchat.dto.*;
 import com.bkav.webchat.dto.request.ForgotRequest;
 import com.bkav.webchat.dto.request.LoginRequest;
 import com.bkav.webchat.dto.request.RegisterRequest;
 import com.bkav.webchat.dto.request.ResetPasswordRequest;
-import com.bkav.webchat.enumtype.Account_status;
-import com.bkav.webchat.service.AccountService;
+import com.bkav.webchat.dto.response.ApiResponse;
 import com.bkav.webchat.service.AuthService;
 
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
@@ -34,6 +31,13 @@ public class AuthenControllerRest {
         String token = request.get("token");
         String fcmToken = request.get("fcmToken");
         return authService.loginWithGoogle(token, googleClientId, fcmToken);
+    }
+    //login with facebook
+    @PostMapping("/login-facebook")
+    public ResponseEntity<ApiResponse<?>> loginFacebook(@RequestBody Map<String, String> requestBody) {
+        String accessToken = requestBody.get("accessToken");
+        String fcmToken = requestBody.get("fcmToken");
+        return authService.loginWithFacebook(accessToken, fcmToken);
     }
     @PostMapping("/registerDevice")
     public ResponseEntity<ApiResponse<?>> registerDeviceToken(@RequestBody Map<String, String> request, Principal principal) {

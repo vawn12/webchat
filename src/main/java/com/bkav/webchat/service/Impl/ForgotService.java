@@ -39,7 +39,7 @@ public class ForgotService {
                 .expiryDate(dto.getExpiryDate())
                 .build();
     }
-
+    // Tạo 1 mat khẩu mới dựa trên email đưọc cung cấp
     @Transactional
     public ForgotPasswordDTO createForgotPassword(ForgotPasswordDTO dto) {
         Account account = accountRepository.findById(dto.getAccountId())
@@ -60,35 +60,35 @@ public class ForgotService {
     }
 
 
-    @Transactional
-    public ForgotPasswordDTO getForgotPasswordById(Integer id) {
-        ForgotPassword entity = forgotPasswordRepository.findById(id)
-                .orElseThrow(() -> new RuntimeException("ForgotPassword not found with ID: " + id));
-        return toDTO(entity);
-    }
-
-    @Transactional
-    public List<ForgotPasswordDTO> getAllForgotPasswords() {
-        return forgotPasswordRepository.findAll()
-                .stream()
-                .map(this::toDTO)
-                .collect(Collectors.toList());
-    }
-
-    @Transactional
-    public ForgotPasswordDTO updateForgotPassword(Integer id, ForgotPasswordDTO dto) {
-        ForgotPassword existing = forgotPasswordRepository.findById(id)
-                .orElseThrow(() -> new RuntimeException("ForgotPassword not found with ID: " + id));
-
-        // Cập nhật dữ liệu
-        existing.setToken(dto.getToken());
-        existing.setExpiryDate(dto.getExpiryDate());
-        existing.setAccount(accountRepository.findById(dto.getId())
-                .orElseThrow(() -> new RuntimeException("Account not found with ID: " + dto.getId())));
-
-        ForgotPassword updated = forgotPasswordRepository.save(existing);
-        return toDTO(updated);
-    }
+//    @Transactional
+//    public ForgotPasswordDTO getForgotPasswordById(Integer id) {
+//        ForgotPassword entity = forgotPasswordRepository.findById(id)
+//                .orElseThrow(() -> new RuntimeException("ForgotPassword not found with ID: " + id));
+//        return toDTO(entity);
+//    }
+//
+//    @Transactional
+//    public List<ForgotPasswordDTO> getAllForgotPasswords() {
+//        return forgotPasswordRepository.findAll()
+//                .stream()
+//                .map(this::toDTO)
+//                .collect(Collectors.toList());
+//    }
+//
+//    @Transactional
+//    public ForgotPasswordDTO updateForgotPassword(Integer id, ForgotPasswordDTO dto) {
+//        ForgotPassword existing = forgotPasswordRepository.findById(id)
+//                .orElseThrow(() -> new RuntimeException("ForgotPassword not found with ID: " + id));
+//
+//        // Cập nhật dữ liệu
+//        existing.setToken(dto.getToken());
+//        existing.setExpiryDate(dto.getExpiryDate());
+//        existing.setAccount(accountRepository.findById(dto.getId())
+//                .orElseThrow(() -> new RuntimeException("Account not found with ID: " + dto.getId())));
+//
+//        ForgotPassword updated = forgotPasswordRepository.save(existing);
+//        return toDTO(updated);
+//    }
 
     @Transactional
     public void deleteForgotPassword(Integer id) {

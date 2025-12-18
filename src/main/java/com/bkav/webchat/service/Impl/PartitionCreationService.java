@@ -1,4 +1,4 @@
-package com.bkav.webchat.service;
+package com.bkav.webchat.service.Impl;
 
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.jdbc.core.JdbcTemplate;

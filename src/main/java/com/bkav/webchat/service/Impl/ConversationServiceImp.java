@@ -1,6 +1,6 @@
 package com.bkav.webchat.service.Impl;
 
-import com.bkav.webchat.dto.ContactResponseDTO;
+import com.bkav.webchat.dto.response.ContactResponseDTO;
 import com.bkav.webchat.dto.m.ConversationDTO;
 import com.bkav.webchat.dto.m.ParticipantDTO;
 import com.bkav.webchat.entity.*;
@@ -118,7 +118,7 @@ public class ConversationServiceImp implements ConversationService {
                 .unreadCount(unread)
                 .build();
     }
-
+    // Tạo nhóm và thêm thành viên vào nhóm
     @Override
     @Transactional
     public ConversationDTO createGroupConversation(String authorizationHeader, String name, List<Integer> participantIds) {
@@ -402,7 +402,7 @@ public class ConversationServiceImp implements ConversationService {
 
         return mapToDTO(fullData);
     }
-//hàm trợ giup lưu
+    //hàm trợ giup lưu
     private void ensureDualContactRelationship(Account user1, Account user2) {
         saveOrUpdateContactStatus(user1, user2);
         saveOrUpdateContactStatus(user2, user1);
@@ -427,6 +427,51 @@ public class ConversationServiceImp implements ConversationService {
                     .build();
             userContactRepository.save(newContact);
         }
+    }
+    // Đổi tên nhóm
+    @Override
+    @Transactional
+    public ConversationDTO renameGroupConversation(String authorizationHeader, Integer conversationId, String newName) {
+        Account requester = extractAccount(authorizationHeader);
+        if (requester == null) {
+            throw new RuntimeException("Unauthorized: Invalid token");
+        }
+
+        // Kiểm tra tên mới
+        if (newName == null || newName.trim().isEmpty()) {
+            throw new RuntimeException("Tên nhóm không được để trống");
+        }
+
+        // Tìm cuộc trò chuyện
+        Conversation conversation = conversationRepository.findById(conversationId)
+                .orElseThrow(() -> new RuntimeException("Không tìm thấy cuộc trò chuyện"));
+
+        // Kiểm tra xem có phải là GROUP không
+        if (!ConversationType.GROUP.equals(conversation.getType())) {
+            throw new RuntimeException("Chỉ có thể đổi tên cho cuộc trò chuyện nhóm");
+        }
+
+        // Người dùng phải là thành viên trong nhóm
+        Participants participant = participantRepository.findParticipant(
+                conversationId,
+                requester.getAccountId()
+        ).orElseThrow(() -> new RuntimeException("Bạn không phải là thành viên của nhóm này"));
+        /* Cho admin
+        if (participant.getRole() != ParticipantRole.admin) {
+            throw new RuntimeException("Chỉ quản trị viên mới có quyền đổi tên nhóm");
+        }
+        */
+
+        // Cập nhật tên mới
+        conversation.setName(newName.trim());
+        Conversation updatedConversation = conversationRepository.save(conversation);
+
+        // Load lại đầy đủ dữ liệu
+        Conversation fullData = conversationRepository
+                .findByIdWithParticipants(updatedConversation.getConversationId())
+                .orElseThrow(() -> new RuntimeException("Lỗi khi tải lại dữ liệu sau khi đổi tên"));
+
+        return mapToDTO(fullData);
     }
 }
 

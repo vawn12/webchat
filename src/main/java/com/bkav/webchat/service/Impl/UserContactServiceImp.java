@@ -1,7 +1,6 @@
 package com.bkav.webchat.service.Impl;
 
-import com.bkav.webchat.dto.ContactResponseDTO;
-import com.bkav.webchat.dto.m.UserContactDTO;
+import com.bkav.webchat.dto.response.ContactResponseDTO;
 import com.bkav.webchat.entity.*;
 import com.bkav.webchat.enumtype.ConversationType;
 import com.bkav.webchat.repository.ConversationRepository;
@@ -31,7 +30,7 @@ public class UserContactServiceImp implements UserContactService {
     private ConversationRepository conversationRepository;
     @Autowired
     private MessageRepository messageRepository;
-
+    // Lấy danh sách tất cả liên lạc
     public Page<ContactResponseDTO> getAllContacts(int page, int size) {
         List<ContactResponseDTO> allContacts = new ArrayList<>();
         //  Nhóm
@@ -90,29 +89,46 @@ public class UserContactServiceImp implements UserContactService {
                 .lastMessageAt(lastMsg != null ? lastMsg.getCreatedAt() : uc.getCreatedAt())
                 .build();
     }
-    public Page<ContactResponseDTO> searchContacts(String keyword, int page, int size) {
+    // Tìm kiếm nguoi liên hệ
+    // Sửa lại signature của hàm để nhận thêm username
+    public Page<ContactResponseDTO> searchContacts(String keyword, int page, int size, String username) {
         List<ContactResponseDTO> results = new ArrayList<>();
 
-        // Tìm tất cả người dùng
-        List<Account> accounts = accountService.findByKeyword(keyword);
-        for (Account account : accounts) {
+        // 1. Lấy thông tin người đang thực hiện tìm kiếm
+        Account currentUser = accountService.getAccountEntityByUsername(username);
+        if (currentUser == null) {
+            throw new RuntimeException("User not found");
+        }
 
+        // 2. Tìm tất cả người dùng khớp từ khóa
+        List<Account> accounts = accountService.findByKeyword(keyword);
+
+        for (Account account : accounts) {
+            // Bỏ qua chính mình trong kết quả tìm kiếm
+            if (account.getAccountId().equals(currentUser.getAccountId())) {
+                continue;
+            }
+
+            // Tạo UserContact giả lập đúng logic
             UserContact temp = new UserContact();
-            temp.setContactUser(account);
-            temp.setOwner(account);
+            temp.setContactUser(account); // Người được tìm thấy
+            temp.setOwner(currentUser);   // Người đang tìm kiếm (QUAN TRỌNG)
+            temp.setCreatedAt(java.time.LocalDateTime.now()); // Gán thời gian tạm để tránh lỗi Null khi sort
+
+            // mapPrivateToDTO sẽ tự động tìm Conversation giữa CurrentUser và Account này
             results.add(mapPrivateToDTO(temp));
         }
 
-        // Tìm tất cả nhóm
+        // 3. Tìm tất cả nhóm (Giữ nguyên)
         List<Conversation> groups = conversationRepository.findAllByTypeAndNameContainingIgnoreCase(
                 ConversationType.GROUP, keyword);
         results.addAll(groups.stream()
                 .map(this::mapGroupToDTO)
                 .toList());
 
-        // Sắp xếp theo tin nhắn mới nhất
+        // 4. Sắp xếp (Có sửa nhẹ để tránh NullPointerException)
         results.sort(Comparator.comparing(
-                (ContactResponseDTO dto) -> Optional.ofNullable(dto.getLastMessageAt()).orElse(null),
+                (ContactResponseDTO dto) -> Optional.ofNullable(dto.getLastMessageAt()).orElse(java.time.LocalDateTime.MIN),
                 Comparator.nullsLast(Comparator.naturalOrder())
         ).reversed());
 

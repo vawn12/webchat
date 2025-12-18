@@ -1,7 +1,7 @@
 package com.bkav.webchat.controller;
 
-import com.bkav.webchat.dto.ApiResponse;
-import com.bkav.webchat.dto.MessageResponseDTO;
+import com.bkav.webchat.dto.response.ApiResponse;
+import com.bkav.webchat.dto.response.MessageResponseDTO;
 import com.bkav.webchat.dto.request.ChatMessageRequest;
 import com.bkav.webchat.dto.request.ReactionRequest;
 import com.bkav.webchat.entity.MessageDocument;
@@ -96,6 +96,14 @@ public class ChatController {
         if (!response.isSuccess()) {
             return ResponseEntity.badRequest().body(response);
         }
+        return ResponseEntity.ok(response);
+    }
+    @PostMapping("/mark-read/{conversationId}")
+    public ResponseEntity<ApiResponse<Void>> markAsRead(
+            @PathVariable Integer conversationId,
+            Principal principal
+    ) {
+        ApiResponse<Void> response = messageService.markAsRead(conversationId, principal.getName());
         return ResponseEntity.ok(response);
     }
 }

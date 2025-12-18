@@ -1,5 +1,6 @@
 package com.bkav.webchat.repository;
 
+import com.bkav.webchat.entity.Message;
 import com.bkav.webchat.entity.MessageStatus;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
@@ -22,4 +23,5 @@ public interface MessageStatusRepository extends JpaRepository<MessageStatus, In
             "AND ms.status <> 'read'")
     List<MessageStatus> findUnreadStatuses(@Param("accountId") Integer accountId,
                                            @Param("conversationId") Integer conversationId);
+    List<MessageStatus> findAllByMessage(Message message);
 }

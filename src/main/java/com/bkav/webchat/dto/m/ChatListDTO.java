@@ -1,4 +1,4 @@
-package com.bkav.webchat.dto;
+package com.bkav.webchat.dto.m;
 
 import lombok.AllArgsConstructor;
 import lombok.Builder;

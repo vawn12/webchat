@@ -1,6 +1,6 @@
 package com.bkav.webchat.service;
 
-import com.bkav.webchat.dto.ApiResponse;
+import com.bkav.webchat.dto.response.ApiResponse;
 import com.bkav.webchat.dto.request.ForgotRequest;
 import com.bkav.webchat.dto.request.LoginRequest;
 import com.bkav.webchat.dto.request.RegisterRequest;
@@ -17,4 +17,5 @@ public interface AuthService {
     ResponseEntity<ApiResponse<?>> refresh(String refreshToken);
     ResponseEntity<ApiResponse<?>> loginWithGoogle(String googleToken, String clientId,String fcmToken);
     void saveDeviceToken(String username, String fcmToken);
+    ResponseEntity<ApiResponse<?>> loginWithFacebook(String accessToken, String fcmToken);
 }

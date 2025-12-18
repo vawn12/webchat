@@ -1,20 +1,13 @@
 package com.bkav.webchat.controller;
 
-import com.bkav.webchat.dto.ApiResponse;
-import com.bkav.webchat.entity.Account;
-import com.bkav.webchat.entity.UserDeviceToken;
+import com.bkav.webchat.cache.RedisService;
+import com.bkav.webchat.dto.response.ApiResponse;
 import com.bkav.webchat.repository.UserDeviceTokenRepository;
 import com.bkav.webchat.service.AccountService;
 import com.bkav.webchat.service.FirebasePushService;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.http.ResponseEntity;
-import org.springframework.web.bind.annotation.PostMapping;
-import org.springframework.web.bind.annotation.RequestBody;
-import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.bind.annotation.*;
 
-import java.security.Principal;
-import java.time.LocalDateTime;
 import java.util.Map;
 
 @RestController
@@ -27,6 +20,8 @@ public class NotificationController {
     private AccountService accountService;
     @Autowired
     private FirebasePushService firebasePushService;
+    @Autowired
+    private RedisService redisService;
 
     @PostMapping("/send")
     public ApiResponse<String> sendTest(@RequestBody Map<String, Object> request) {
@@ -45,5 +40,22 @@ public class NotificationController {
         } else {
             return ApiResponse.fail("Gửi thất bại. User ID " + userId + " không tồn tại hoặc chưa đăng nhập (chưa có Token).");
         }
+    }
+    @PostMapping("/setup-noti")
+    public ApiResponse<String> setupNotificationTest(
+            @RequestParam Integer userId,
+            @RequestParam int unreadCount,
+            @RequestParam String username
+    ) {
+        // 1. Giả lập số tin nhắn đang chờ
+        redisService.setUnreadNotification(userId, unreadCount);
+
+        // 2. Xóa thời gian chờ (để tin nhắn tiếp theo được gửi đi ngay)
+        redisService.clearPushCooldown(userId);
+
+        // 3. Đảm bảo user đang Offline (để Consumer không skip)
+        redisService.forceOffline(username);
+
+        return ApiResponse.success("Đã setup: Unread=" + unreadCount + ", Cooldown=CLEARED, Status=OFFLINE", null);
     }
 }

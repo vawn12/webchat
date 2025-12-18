@@ -1,9 +1,10 @@
 package com.bkav.webchat.service.Impl;
 
 import com.bkav.webchat.cache.RedisService;
-import com.bkav.webchat.dto.*;
 import com.bkav.webchat.dto.m.*;
 import com.bkav.webchat.dto.request.*;
+import com.bkav.webchat.dto.response.AccountResponse;
+import com.bkav.webchat.dto.response.ApiResponse;
 import com.bkav.webchat.entity.Account;
 import com.bkav.webchat.entity.UserDeviceToken;
 import com.bkav.webchat.enumtype.Account_status;
@@ -16,12 +17,12 @@ import com.google.api.client.googleapis.auth.oauth2.GoogleIdTokenVerifier;
 import com.google.api.client.http.javanet.NetHttpTransport;
 import com.google.api.client.json.gson.GsonFactory;
 import lombok.RequiredArgsConstructor;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.*;
 import org.springframework.security.core.userdetails.UsernameNotFoundException;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.client.RestTemplate;
+
 import java.time.LocalDateTime;
 
 import java.util.*;
@@ -288,7 +289,98 @@ public class AuthServiceImpl implements AuthService {
                     .body(ApiResponse.fail("Lỗi xác thực Google: " + e.getMessage()));
         }
     }
-//	lưu token của thiết bị được đăng nhập
+    // login bằng facebook
+    @Override
+    public ResponseEntity<ApiResponse<?>> loginWithFacebook(String accessToken, String fcmToken) {
+        try {
+            //  Gọi Facebook Graph API để lấy thông tin user từ accessToken
+            String facebookGraphUrl = "https://graph.facebook.com/me?fields=id,name,email,picture&access_token=" + accessToken;
+
+            RestTemplate restTemplate = new RestTemplate();
+            // Gọi API, kết quả trả về map object
+            Map<String, Object> fbResponse = restTemplate.getForObject(facebookGraphUrl, Map.class);
+
+            if (fbResponse == null || fbResponse.containsKey("error")) {
+                return ResponseEntity.badRequest().body(ApiResponse.fail("Token Facebook không hợp lệ hoặc đã hết hạn"));
+            }
+
+            // Lấy thông tin từ response của Facebook
+            String email = (String) fbResponse.get("email");
+            String name = (String) fbResponse.get("name");
+            String facebookId = (String) fbResponse.get("id");
+
+            // Xử lý lấy ảnh đại diện
+            String pictureUrl = null;
+            if (fbResponse.get("picture") instanceof Map) {
+                Map<String, Object> pictureObj = (Map<String, Object>) fbResponse.get("picture");
+                if (pictureObj.get("data") instanceof Map) {
+                    Map<String, Object> dataObj = (Map<String, Object>) pictureObj.get("data");
+                    pictureUrl = (String) dataObj.get("url");
+                }
+            }
+
+            // Trường hợp Facebook không trả về email (do user đăng ký bằng sđt)
+            // sẽ tạo một email giả lập dựa trên Facebook ID để lưu vào DB
+            if (email == null || email.isEmpty()) {
+                email = facebookId + "@facebook.com";
+            }
+
+            // Tìm hoặc Tạo User (Logic tương tự Google Login)
+            Account account = accountRepository.findByEmail(email).orElse(null);
+
+            if (account == null) {
+                // Xử lý trùng username
+                String baseUsername = email.split("@")[0];
+                // Loại bỏ các ký tự đặc biệt khỏi username nếu có
+                baseUsername = baseUsername.replaceAll("[^a-zA-Z0-9]", "");
+
+                String finalUsername = baseUsername;
+                int suffix = 1;
+                while (accountRepository.existsByUsername(finalUsername)) {
+                    finalUsername = baseUsername + "_" + suffix;
+                    suffix++;
+                }
+
+                account = new Account();
+                account.setEmail(email);
+                account.setDisplayName(name);
+                account.setAvatarUrl(pictureUrl);
+                account.setStatus(Account_status.online);
+                account.setPasswordHash(""); // Không có password
+                account.setUsername(finalUsername);
+
+                account = accountRepository.save(account);
+            }
+
+            // Lưu device token nếu có
+            if (fcmToken != null && !fcmToken.isEmpty()) {
+                saveDeviceToken(account.getUsername(), fcmToken);
+            }
+
+            // Tạo JWT AccessToken và RefreshToken
+            String newAccessToken = jwtService.generateAccessToken(account);
+            String newRefreshToken = jwtService.generateRefreshToken(account);
+
+            // Lưu refresh token vào Redis
+            redisService.saveToken(newRefreshToken, account.getUsername());
+
+            // Kết quả
+            Map<String, Object> data = new HashMap<>();
+            data.put("accessToken", newAccessToken);
+            data.put("refreshToken", newRefreshToken);
+            data.put("userId", account.getAccountId());
+            data.put("username", account.getDisplayName());
+            data.put("avatarUrl", account.getAvatarUrl());
+
+            return ResponseEntity.ok(ApiResponse.success("Đăng nhập Facebook thành công", data));
+
+        } catch (Exception e) {
+            e.printStackTrace();
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(ApiResponse.fail("Lỗi xác thực Facebook: " + e.getMessage()));
+        }
+    }
+    //	lưu token của thiết bị được đăng nhập
     public void saveDeviceToken(String username, String fcmToken) {
         //  Lấy thông tin người dùng đang đăng nhập
         Account currentUser = accountRepository.findByUsername(username)

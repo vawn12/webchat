@@ -1,8 +1,7 @@
 package com.bkav.webchat.service;
 
-import com.bkav.webchat.dto.ContactResponseDTO;
+import com.bkav.webchat.dto.response.ContactResponseDTO;
 import com.bkav.webchat.dto.m.ConversationDTO;
-import com.bkav.webchat.entity.Conversation;
 import org.springframework.data.domain.Page;
 
 import java.util.List;
@@ -15,5 +14,5 @@ public interface ConversationService {
     ConversationDTO getConversationDetails(String authorizationHeader, Integer conversationId);
     void leaveGroup(String authorizationHeader, Integer conversationId);
     ConversationDTO createPrivateConversation(String authorizationHeader, Integer friendId);
-
+    ConversationDTO renameGroupConversation(String authorizationHeader, Integer conversationId, String newName);
 }

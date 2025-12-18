@@ -1,8 +1,9 @@
 package com.bkav.webchat.service.Impl;
 
-import com.bkav.webchat.dto.ApiResponse;
-import com.bkav.webchat.dto.KafkaMessageEvent;
-import com.bkav.webchat.dto.MessageResponseDTO;
+import com.bkav.webchat.cache.RedisService;
+import com.bkav.webchat.dto.response.ApiResponse;
+import com.bkav.webchat.dto.response.KafkaMessageEvent;
+import com.bkav.webchat.dto.response.MessageResponseDTO;
 import com.bkav.webchat.dto.request.ChatMessageRequest;
 import com.bkav.webchat.dto.request.ReactionRequest;
 import com.bkav.webchat.entity.*;
@@ -48,6 +49,8 @@ public class MessageServiceImpl implements MessageService {
     private AttachmentRepository attachmentRepository;
     @Autowired
     private ApplicationEventPublisher eventPublisher;
+    @Autowired
+    private RedisService redisService;
     @Autowired
     private ParticipationRepository participationRepository;
     @Autowired
@@ -114,6 +117,8 @@ public class MessageServiceImpl implements MessageService {
                 .updatedAt(LocalDateTime.now())
                 .build();
     }
+
+    //gửi tin nhắn đồng thời reply lại tin nhắn cũ realtime
     @Override
     @Transactional
     public ApiResponse<MessageResponseDTO> sendMessage(Integer conversationId, ChatMessageRequest request, String username) {
@@ -199,7 +204,7 @@ public class MessageServiceImpl implements MessageService {
         // Trả về kết quả ngay lập tức cho người dùng
         return ApiResponse.success("Gửi tin nhắn thành công.", dto);
     }
-    //update
+    //update tin nhắn của nguời gửi
     public ApiResponse<MessageResponseDTO> updateMessage(Integer conversationId, ChatMessageRequest request, String username) {
         Optional<Conversation> optionalConversation = conversationRepository.findById(conversationId);
         if (optionalConversation.isEmpty()) {
@@ -259,6 +264,8 @@ public class MessageServiceImpl implements MessageService {
     }
 
     // XÓA TIN NHẮN
+    // Chỉ có thể xóa tin nhắn của mình gửi và không thể xóa tin nhắn của đối phương
+    @Transactional
     public ApiResponse<Void> deleteMessage(Integer conversationId, ChatMessageRequest request, String username) {
         Optional<Conversation> optionalConversation = conversationRepository.findById(conversationId);
         if (optionalConversation.isEmpty()) {
@@ -289,19 +296,46 @@ public class MessageServiceImpl implements MessageService {
         if (!message.getSender().getAccountId().equals(currentUser.getAccountId())) {
             return ApiResponse.fail("Bạn không có quyền xóa tin nhắn của người khác.");
         }
+        List<Attachment> attachments = attachmentRepository.findByMessage(message);
+        if (attachments != null && !attachments.isEmpty()) {
+            attachmentRepository.deleteAll(attachments);
+        }
 
-        messageRepository.delete(message);
-        Map<String, Object> socketData = Map.of("messageId", request.getMessageId());
+        //  Cập nhật nội dung tin nhắn
+        message.setContent("Tin nhắn đã được thu hồi");
+        message.setMessageType("recalled");
+        message.setUpdatedAt(LocalDateTime.now());
+        // Xóa metadata (nếu là tin reply) để tránh hiển thị trích dẫn cũ
+        message.setMetadata(null);
+
+        Message updatedMessage = messageRepository.save(message);
+
+        List<MessageStatus> statuses = messageStatusRepository.findAllByMessage(message);
+        for (MessageStatus status : statuses) {
+            status.setStatus(Message_Status.recalled);
+            status.setUpdatedAt(LocalDateTime.now());
+        }
+        messageStatusRepository.saveAll(statuses);
+        MessageResponseDTO dto = toDTO(updatedMessage);
+
+        // Map thêm data để FE xử lý giao diện dễ hơn
+        Map<String, Object> socketData = Map.of(
+                "messageId", updatedMessage.getMessageId(),
+                "content", updatedMessage.getContent(),
+                "messageType", "recalled",
+                "updatedAt", updatedMessage.getUpdatedAt().toString()
+        );
 
         KafkaMessageEvent event = KafkaMessageEvent.builder()
-                .eventType("MESSAGE_DELETE")
+                .eventType("MESSAGE_UPDATE") // Dùng UPDATE
                 .conversationId(conversationId)
-                .extraData(socketData) // Chỉ cần ID để FE xóa
+                .messageData(dto)
+                .extraData(socketData)
                 .build();
 
         kafkaTemplate.send(TOPIC_CHAT, String.valueOf(conversationId), event);
 
-        return ApiResponse.success("Xóa thành công.", null);
+        return ApiResponse.success("Thu hồi tin nhắn thành công.", null);
     }
 
     //thả react cho 1 message
@@ -383,7 +417,7 @@ public class MessageServiceImpl implements MessageService {
 
     }
 
-
+    // Tải các tệp và ảnh lên đoạn chat
     public ApiResponse<MessageResponseDTO> uploadAttachment(Integer conversationId, MultipartFile file, String username) {
         try {
             // Kiểm tra cuộc trò chuyện hợp lệ
@@ -465,7 +499,7 @@ public class MessageServiceImpl implements MessageService {
         }
     }
 
-
+    // Tìm kiếm tin nhắn bằng elasticsearch
     @Override
     public ApiResponse<List<MessageDocument>> searchMessages(String query, String username) {
         // Lấy thông tin người dùng hiện tại
@@ -506,28 +540,34 @@ public class MessageServiceImpl implements MessageService {
             return ApiResponse.success("Không tìm thấy kết quả.", List.of());
         }
         // Tìm kiếm trong Elasticsearch với danh sách ID tổng hợp
-        List<MessageDocument> results = messageSearchRepository.findByContentContainingAndConversationIdIn(query, new ArrayList<>(allConversationIds));
+        List<MessageDocument> results = messageSearchRepository
+                .findByContentContainingAndConversationIdInAndMessageTypeNot(
+                        query,
+                        new ArrayList<>(allConversationIds),
+                        String.valueOf(Message_Status.recalled)
+                );
         return ApiResponse.success("Tìm thấy " + results.size() + " kết quả.", results);
     }
 
-
+    // Đánh dấu  các tin nhắn đã đọc
     public ApiResponse<Void> markAsRead(Integer conversationId, String username) {
         Account user = accountService.getAccountEntityByUsername(username);
         if (user == null) return ApiResponse.fail("User not found");
 
-        // Tìm tất cả tin nhắn chưa đọc của user này trong conversation này
+        // Update DB
         List<MessageStatus> unreadStatuses = messageStatusRepository.findUnreadStatuses(user.getAccountId(), conversationId);
-
         if (!unreadStatuses.isEmpty()) {
-            // Update toàn bộ sang READ
             for (MessageStatus status : unreadStatuses) {
                 status.setStatus(Message_Status.read);
                 status.setUpdatedAt(LocalDateTime.now());
             }
             messageStatusRepository.saveAll(unreadStatuses);
 
-            // Gửi socket báo cho user kia biết là "đã xem"
+            // (Optional) Gửi socket báo đối phương đã xem...
         }
+
+        //  Reset biến đếm thông báo trong Redis
+        redisService.resetUnreadNotification(user.getAccountId());
 
         return ApiResponse.success("Đã đánh dấu đã đọc", null);
     }

@@ -1,7 +1,7 @@
 package com.bkav.webchat.controller;
 
-import com.bkav.webchat.dto.ApiResponse;
-import com.bkav.webchat.dto.ContactResponseDTO;
+import com.bkav.webchat.dto.response.ApiResponse;
+import com.bkav.webchat.dto.response.ContactResponseDTO;
 import com.bkav.webchat.dto.m.ConversationDTO;
 import com.bkav.webchat.service.ConversationService;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -79,6 +79,20 @@ public class ConversationController {
 
         ConversationDTO dto = conversationService.getConversationDetails(token, conversationId);
         return ResponseEntity.ok(ApiResponse.success("Lấy chi tiết cuộc trò chuyện thành công", dto));
+    }
+    @PutMapping("/{conversationId}/rename")
+    public ResponseEntity<ConversationDTO> renameGroup(
+            @RequestHeader("Authorization") String authorizationHeader,
+            @PathVariable Integer conversationId,
+            @RequestParam String newName) {
+
+        ConversationDTO updatedConversation = conversationService.renameGroupConversation(
+                authorizationHeader,
+                conversationId,
+                newName
+        );
+
+        return ResponseEntity.ok(updatedConversation);
     }
     //rời cuộc tro chuyện
     @PostMapping("/{conversationId}/leave")

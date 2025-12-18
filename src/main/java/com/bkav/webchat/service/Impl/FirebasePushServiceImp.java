@@ -6,6 +6,7 @@ import com.bkav.webchat.service.FirebasePushService;
 import com.google.firebase.messaging.*;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -16,32 +17,53 @@ public class FirebasePushServiceImp implements FirebasePushService {
 
     @Autowired
     private UserDeviceTokenRepository tokenRepository;
-
+    // Gửi thông báo đến các thiết bị được sử dụng
     @Override
     public void notifyChatBump(Integer userId, Long conversationId, String senderName, String content) {
-        // Lấy danh sách token của User nhận tin nhắn
-        List<UserDeviceToken> deviceTokens = tokenRepository.findByAccount_AccountId(userId);
+        sendNotificationToGroup(List.of(userId), conversationId, senderName, content);
+    }
+    @Override
+    @Transactional
+    public void sendNotificationToGroup(List<Integer> recipientIds, Long conversationId, String title, String body) {
+        if (recipientIds == null || recipientIds.isEmpty()) return;
+
+        // Lấy tất cả token chỉ với 1 lệnh SELECT
+        List<UserDeviceToken> deviceTokens = tokenRepository.findAllByAccount_AccountIdIn(recipientIds);
 
         if (deviceTokens.isEmpty()) return;
 
-        List<String> tokens = deviceTokens.stream()
+        // Lấy list String token và loại bỏ trùng lặp
+        List<String> fcmTokens = deviceTokens.stream()
                 .map(UserDeviceToken::getToken)
+                .distinct()
                 .collect(Collectors.toList());
 
-        // Tạo MulticastMessage gửi 1 phát cho nhiều thiết bị
+        if (fcmTokens.isEmpty()) return;
+
+        // Firebase chỉ cho gửi tối đa 500 token/lần
+        // Nếu nhóm có 1000 thiết bị -> Chia làm 2 lần gửi
+        int batchSize = 500;
+        for (int i = 0; i < fcmTokens.size(); i += batchSize) {
+            int end = Math.min(i + batchSize, fcmTokens.size());
+            List<String> subListTokens = fcmTokens.subList(i, end);
+
+            sendBatchToFirebase(subListTokens, conversationId, title, body);
+        }
+    }
+    // Hàm phụ để gửi một batch (tối đa 500)
+    private void sendBatchToFirebase(List<String> tokens, Long conversationId, String title, String body) {
         MulticastMessage message = MulticastMessage.builder()
                 .addAllTokens(tokens)
                 .putData("type", "NEW_MESSAGE")
                 .putData("conversationId", conversationId.toString())
                 .setNotification(Notification.builder()
-                        .setTitle(senderName)
-                        .setBody(content.length() > 50 ? content.substring(0, 50) + "..." : content)
+                        .setTitle(title)
+                        .setBody(body.length() > 100 ? body.substring(0, 100) + "..." : body)
                         .build())
-                // Config cho Web
                 .setAndroidConfig(AndroidConfig.builder()
                         .setPriority(AndroidConfig.Priority.HIGH)
                         .setNotification(AndroidNotification.builder()
-                                .setClickAction("OPEN_CHAT_ACTIVITY") // Action bên Client xử lý
+                                .setClickAction("OPEN_CHAT_ACTIVITY")
                                 .build())
                         .build())
                 .setWebpushConfig(WebpushConfig.builder()
@@ -52,20 +74,18 @@ public class FirebasePushServiceImp implements FirebasePushService {
                 .build();
 
         try {
-            // Gửi và xử lý kết quả
             BatchResponse response = FirebaseMessaging.getInstance().sendEachForMulticast(message);
 
-            // Kiểm tra token lỗi để xóa khỏi DB
+            // Xử lý token lỗi
             if (response.getFailureCount() > 0) {
                 List<SendResponse> responses = response.getResponses();
                 List<String> failedTokens = new ArrayList<>();
-                for (int i = 0; i < responses.size(); i++) {
-                    if (!responses.get(i).isSuccessful()) {
-                        // Nếu lỗi là do Token không hợp lệ (User đã logout/gỡ app)
-                        MessagingErrorCode errorCode = responses.get(i).getException().getMessagingErrorCode();
+                for (int j = 0; j < responses.size(); j++) {
+                    if (!responses.get(j).isSuccessful()) {
+                        MessagingErrorCode errorCode = responses.get(j).getException().getMessagingErrorCode();
                         if (MessagingErrorCode.UNREGISTERED.equals(errorCode) ||
                                 MessagingErrorCode.INVALID_ARGUMENT.equals(errorCode)) {
-                            failedTokens.add(tokens.get(i));
+                            failedTokens.add(tokens.get(j));
                         }
                     }
                 }
@@ -74,36 +94,29 @@ public class FirebasePushServiceImp implements FirebasePushService {
                 }
             }
         } catch (FirebaseMessagingException e) {
-            e.printStackTrace();
+            System.err.println("Lỗi gửi Firebase: " + e.getMessage());
         }
     }
+    // Test gửi tin nhắn
     @Override
+    @Transactional
     public boolean sendTestNotification(Integer userId, String title, String body) {
+        // 1. Kiểm tra xem user có token không TRƯỚC khi gửi
         List<UserDeviceToken> deviceTokens = tokenRepository.findByAccount_AccountId(userId);
+
         if (deviceTokens.isEmpty()) {
-            System.out.println("User ID " + userId + " không có token nào.");
-            return false;
+            System.out.println("User ID " + userId + " chưa đăng nhập thiết bị nào (Không có token).");
+            return false; // Trả về false ngay lập tức
         }
 
-        List<String> tokens = deviceTokens.stream()
-                .map(UserDeviceToken::getToken)
-                .collect(Collectors.toList());
-
-        MulticastMessage message = MulticastMessage.builder()
-                .addAllTokens(tokens)
-                // Gửi cả Notification và Data để đảm bảo hiện thông báo
-                .setNotification(Notification.builder()
-                        .setTitle(title)
-                        .setBody(body)
-                        .build())
-                .putData("type", "TEST_MANUAL")
-                .build();
-
+        //  Nếu có token thì mới gọi hàm gửi
         try {
-            FirebaseMessaging.getInstance().sendEachForMulticast(message);
-            System.out.println("Đã gửi test thành công cho User ID: " + userId);
+            // Gọi hàm gửi nhóm
+            sendNotificationToGroup(List.of(userId), 0L, title, body);
             return true;
-        } catch (FirebaseMessagingException e) {
+        } catch (Exception e) {
+            //  In lỗi ra để debug trường hợp User có token mà vẫn fail
+            System.err.println("Lỗi khi gửi Firebase: " + e.getMessage());
             e.printStackTrace();
             return false;
         }

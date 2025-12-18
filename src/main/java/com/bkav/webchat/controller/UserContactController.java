@@ -1,8 +1,8 @@
 package com.bkav.webchat.controller;
 
-import com.bkav.webchat.dto.ApiResponse;
-import com.bkav.webchat.dto.ContactResponseDTO;
-import com.bkav.webchat.dto.m.UserContactDTO;
+import com.bkav.webchat.dto.response.ApiResponse;
+import com.bkav.webchat.dto.response.ContactResponseDTO;
+import com.bkav.webchat.security.JwtService;
 import com.bkav.webchat.service.UserContactService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.domain.Page;
@@ -18,15 +18,18 @@ public class UserContactController {
 
     @Autowired
     private UserContactService userContactService;
+    @Autowired
+    private JwtService jwtService;
 
 
     @GetMapping("/search")
     public ResponseEntity<Map<String, Object>> searchContacts(
             @RequestParam String keyword,
             @RequestParam(defaultValue = "0") int page,
-            @RequestParam(defaultValue = "10") int size) {
-
-        Page<ContactResponseDTO> results = userContactService.searchContacts(keyword, page, size);
+            @RequestParam(defaultValue = "10") int size,
+            @RequestHeader("Authorization") String token) {
+        String username = jwtService.extractUsername(token.substring(7));
+        Page<ContactResponseDTO> results = userContactService.searchContacts(keyword, page, size,username);
 
         Map<String, Object> response = new LinkedHashMap<>();
         response.put("status", 1);
