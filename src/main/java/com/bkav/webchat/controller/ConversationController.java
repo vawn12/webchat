@@ -28,6 +28,7 @@ public class ConversationController {
         List<ConversationDTO> list = conversationService.getConversationsByType(token, type);
         return ResponseEntity.ok(ApiResponse.success("Fetched " + type + " conversations", list));
     }
+    //tạo nhóm
     @PostMapping("/create")
     public ResponseEntity<ApiResponse<ConversationDTO>> createGroupConversation(
             @RequestHeader("Authorization") String token,
@@ -36,6 +37,7 @@ public class ConversationController {
         ConversationDTO dto = conversationService.createGroupConversation(token, name, participantIds);
         return ResponseEntity.ok(ApiResponse.success("Tạo nhóm thành công", dto));
     }
+    //tao cuộc trò chuyện nhóm
     @PostMapping("/private/{friendId}")
     public ResponseEntity<ApiResponse<ConversationDTO>> createPrivate(
             @RequestHeader("Authorization") String authorization,
@@ -44,7 +46,7 @@ public class ConversationController {
         ConversationDTO dto = conversationService.createPrivateConversation(authorization, friendId);
         return ResponseEntity.ok(ApiResponse.success("Tạo đoạn chat riêng tư thành công", dto));
     }
-
+    //thêm thành viên vào nhóm
     @PostMapping("/{conversationId}/add_members")
     public ResponseEntity<ApiResponse<ConversationDTO>> addMembersToGroup(
             @RequestHeader("Authorization") String token,
@@ -54,6 +56,8 @@ public class ConversationController {
         ConversationDTO dto = conversationService.addMembersToGroup(token, conversationId, memberIds);
         return ResponseEntity.ok(ApiResponse.success("Thêm thành viên thành công", dto));
     }
+
+    //lấy danh sách nhóm
     @GetMapping("")
     public ResponseEntity<Map<String, Object>> getConversations(
             @RequestHeader(HttpHeaders.AUTHORIZATION) String token,
@@ -80,6 +84,7 @@ public class ConversationController {
         ConversationDTO dto = conversationService.getConversationDetails(token, conversationId);
         return ResponseEntity.ok(ApiResponse.success("Lấy chi tiết cuộc trò chuyện thành công", dto));
     }
+    // Đôi tên nhóm
     @PutMapping("/{conversationId}/rename")
     public ResponseEntity<ConversationDTO> renameGroup(
             @RequestHeader("Authorization") String authorizationHeader,
@@ -103,5 +108,15 @@ public class ConversationController {
         conversationService.leaveGroup(token, conversationId);
         return ResponseEntity.ok(ApiResponse.success("Rời nhóm thành công", null));
     }
+    // Xóa thành viên khỏi nhóm
 
+    @PostMapping("/{conversationId}/remove_members")
+    public ResponseEntity<ApiResponse<ConversationDTO>> removeMembersFromGroup(
+            @RequestHeader(HttpHeaders.AUTHORIZATION) String token,
+            @PathVariable Integer conversationId,
+            @RequestBody List<Integer> memberIds) { // Nhận list ID từ Body
+
+        ConversationDTO updatedGroup = conversationService.removeMemberFromGroup(token, conversationId, memberIds);
+        return ResponseEntity.ok(ApiResponse.success("Đã xóa các thành viên khỏi nhóm thành công", updatedGroup));
+    }
 }

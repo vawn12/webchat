@@ -101,7 +101,7 @@ public class FirebasePushServiceImp implements FirebasePushService {
     @Override
     @Transactional
     public boolean sendTestNotification(Integer userId, String title, String body) {
-        // 1. Kiểm tra xem user có token không TRƯỚC khi gửi
+        // Kiểm tra xem user có token không TRƯỚC khi gửi
         List<UserDeviceToken> deviceTokens = tokenRepository.findByAccount_AccountId(userId);
 
         if (deviceTokens.isEmpty()) {

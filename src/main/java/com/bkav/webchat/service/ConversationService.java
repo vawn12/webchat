@@ -15,4 +15,5 @@ public interface ConversationService {
     void leaveGroup(String authorizationHeader, Integer conversationId);
     ConversationDTO createPrivateConversation(String authorizationHeader, Integer friendId);
     ConversationDTO renameGroupConversation(String authorizationHeader, Integer conversationId, String newName);
+    ConversationDTO removeMemberFromGroup(String authorizationHeader, Integer conversationId, List<Integer> memberIdToRemove);
 }

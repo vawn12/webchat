@@ -1,0 +1,23 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: webchat-ingress
+  annotations:
+    # Các cấu hình quan trọng cho Web Chat (WebSocket)
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "3600"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "3600"
+    # Tăng kích thước upload nếu bạn có gửi file/ảnh trong chat
+    nginx.ingress.kubernetes.io/proxy-body-size: "20m"
+spec:
+  ingressClassName: nginx
+  rules:
+  - host: api.webchat.local  # Domain giả lập của bạn
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: webchat-service
+            port:
+              number: 80 # Cổng của Service đã định nghĩa trong k8s-deployment.yaml

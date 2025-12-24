@@ -33,8 +33,24 @@ services:
     environment:
       KAFKA_BROKER_ID: 1
       KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
-      # Cấu hình để code Java bên ngoài (Host) kết nối được vào Docker
       KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://localhost:9092
       KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT
       KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
       KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+  redis:
+    image: redis:alpine
+    container_name: redis_chat
+    ports:
+      - "6379:6379"
+
+    app:
+        build: . # Hoặc image
+        ports:
+        - "8081:8081"
+    depends_on:
+       - db
+       - kafka
+       - redis
+    environment:
+       SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+       SPRING_DATA_REDIS_HOST: redis

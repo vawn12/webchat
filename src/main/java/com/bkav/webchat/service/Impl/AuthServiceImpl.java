@@ -17,9 +17,11 @@ import com.google.api.client.googleapis.auth.oauth2.GoogleIdTokenVerifier;
 import com.google.api.client.http.javanet.NetHttpTransport;
 import com.google.api.client.json.gson.GsonFactory;
 import lombok.RequiredArgsConstructor;
+import org.aspectj.weaver.ast.Var;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.*;
 import org.springframework.security.core.userdetails.UsernameNotFoundException;
+import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestTemplate;
 
@@ -38,7 +40,7 @@ public class AuthServiceImpl implements AuthService {
     private final RedisService redisService;
     private final AccountRepository accountRepository;
     private final UserDeviceTokenRepository userDeviceTokenRepository;
-
+    private final PasswordEncoder passwordEncoder;
     @Value("${app.base-url}")
     private String baseUrl;
 
@@ -142,6 +144,11 @@ public class AuthServiceImpl implements AuthService {
                     .body(ApiResponse.fail("Email không tồn tại"));
 
         String otp = generateOtp();
+        List<Integer> otpDigits = new ArrayList<>();
+        for (char c : otp.toCharArray()) {
+            otpDigits.add(Character.getNumericValue(c));
+        }
+
         ForgotPasswordDTO forgot = ForgotPasswordDTO.builder()
                 .accountId(account.getAccountId())
                 .token(otp)
@@ -149,8 +156,10 @@ public class AuthServiceImpl implements AuthService {
                 .build();
 
         forgotService.createForgotPassword(forgot);
+
+        // Truyền otpDigits vào hàm buildEmailContent
         emailService.sendMailTime(request.getEmail(), "Mã OTP đặt lại mật khẩu",
-                emailService.builEmailContentForResetPassword(List.of()));
+                emailService.builEmailContentForResetPassword(otpDigits));
 
         return ResponseEntity.ok(ApiResponse.success("Đã gửi mã OTP qua email", null));
     }
@@ -158,18 +167,22 @@ public class AuthServiceImpl implements AuthService {
     //RESET PASSWORD
     @Override
     public ResponseEntity<ApiResponse<?>> resetPassword(ResetPasswordRequest request) {
-        var account = accountService.findAccountByEmail(request.getEmail());
-        var forgot = forgotService.findForgotPasswordByAccountId(account.getAccountId());
+        Account account = accountRepository.findByEmail(request.getEmail()).orElse(null);
 
+        if (account == null) {
+            return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                    .body(ApiResponse.fail("Email không tồn tại"));
+        }
+        var forgot = forgotService.findForgotPasswordByAccountId(account.getAccountId());
         if (forgot == null || !forgot.getToken().equals(request.getOtp()))
             return ResponseEntity.status(HttpStatus.BAD_REQUEST)
                     .body(ApiResponse.fail("OTP không hợp lệ"));
-
         if (forgot.getExpiryDate().before(new Date()))
             return ResponseEntity.status(HttpStatus.GONE)
                     .body(ApiResponse.fail("OTP đã hết hạn"));
+        account.setPasswordHash(passwordEncoder.encode(request.getNewPassword()));
+        accountRepository.save(account);
 
-        accountService.register(account, request.getNewPassword());
         forgotService.deleteForgotPassword(account.getAccountId());
 
         return ResponseEntity.ok(ApiResponse.success("Đặt lại mật khẩu thành công", null));

@@ -26,7 +26,7 @@ spec:
   volumeName: postgres-pv-local # Buộc nó dùng cái PV trỏ ổ D
 
 ---
- # --- 1. PostgreSQL Service (Đặt tên là postgres-service để khớp với lỗi của bạn) ---
+ # PostgreSQL Service
 apiVersion: v1
 kind: Service
 metadata:
@@ -37,7 +37,7 @@ spec:
   selector:
     app: postgres
 ---
-# --- 2. PostgreSQL Deployment ---
+#  PostgreSQL Deployment 
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -76,7 +76,7 @@ spec:
           claimName: postgres-pvc
 
 ---
-# --- 3. Kafka Service (Đặt tên là kafka-service) ---
+#  Kafka Service 
 apiVersion: v1
 kind: Service
 metadata:
@@ -88,7 +88,7 @@ spec:
   selector:
     app: kafka
 ---
-# --- 4. Kafka Deployment (Bản đơn giản chạy mode Kraft không cần Zookeeper) ---
+#  Kafka Deployment 
 apiVersion: apps/v1
 kind: Deployment
 metadata:

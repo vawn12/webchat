@@ -80,7 +80,7 @@ public class RedisService {
     }
 
     //  Quản lý Cooldown (Khoảng thời gian chờ giữa 2 lần thông báo)
-// Trả về true nếu đưọc phép gửi (chưa bị khóa), false nếu đang trong thời gian chờ
+ // Trả về true nếu đưọc phép gửi (chưa bị khóa), false nếu đang trong thời gian chờ
     public boolean checkAndSetPushCooldown(Integer userId, long minutes) {
         String key = "PUSH_COOLDOWN:" + userId;
         // Nếu key chưa có thì set và trả về true. Nếu có rồi thì trả về false.
@@ -106,19 +106,19 @@ public class RedisService {
     }
     // CÁC HÀM DÙNG ĐỂ TEST THỬ
 
-    // 1. Hack số lượng tin nhắn chưa đọc (Để test trường hợp > 1)
+    //  Hack số lượng tin nhắn chưa đọc (Để test trường hợp > 1)
     public void setUnreadNotification(Integer userId, long count) {
         String key = "NOTI_UNREAD_COUNT:" + userId;
         stringRedisTemplate.opsForValue().set(key, String.valueOf(count));
     }
 
-    // 2. Xóa Cooldown ngay lập tức (Để không phải chờ 2 phút)
+    // Xóa Cooldown ngay lập tức (Để không phải chờ 2 phút)
     public void clearPushCooldown(Integer userId) {
         String key = "PUSH_COOLDOWN:" + userId;
         redisTemplate.delete(key);
     }
 
-    // 3. Force Offline (Để test gửi thông báo ngay cả khi đang bật socket)
+    // Force Offline (Để test gửi thông báo ngay cả khi đang bật socket)
     public void forceOffline(String username) {
         redisTemplate.delete("ONLINE:" + username);
     }

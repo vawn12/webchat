@@ -428,6 +428,60 @@ public class ConversationServiceImp implements ConversationService {
             userContactRepository.save(newContact);
         }
     }
+    // Xóa thành viên khỏi nhóm (Người tạo nhóm mới có quyền)
+    @Override
+    @Transactional
+    public ConversationDTO removeMemberFromGroup(String authorizationHeader, Integer conversationId, List<Integer> memberIdsToRemove) {
+        Account requester = extractAccount(authorizationHeader);
+        if (requester == null) {
+            throw new RuntimeException("Unauthorized: Invalid token");
+        }
+
+        //  Lấy thông tin cuộc trò chuyện
+        Conversation conversation = conversationRepository.findById(conversationId)
+                .orElseThrow(() -> new RuntimeException("Không tìm thấy cuộc trò chuyện"));
+
+        // Chỉ áp dụng cho nhóm
+        if (!ConversationType.GROUP.equals(conversation.getType())) {
+            throw new RuntimeException("Chỉ có thể xóa thành viên khỏi cuộc trò chuyện nhóm");
+        }
+
+        // Kiểm tra quyền nguời tạo nhóm
+        Participants requesterParticipant = participantRepository.findParticipant(
+                conversationId,
+                requester.getAccountId()
+        ).orElseThrow(() -> new RuntimeException("Bạn không phải là thành viên của nhóm này"));
+
+        if (requesterParticipant.getRole() != ParticipantRole.admin) {
+            throw new RuntimeException("Chỉ quản trị viên (Admin) mới có quyền xóa thành viên.");
+        }
+
+        // Kiểm tra thành viên bị xóa
+        if (memberIdsToRemove.contains(requester.getAccountId())) {
+            throw new RuntimeException("Bạn không thể tự xóa mình bằng chức năng này, hãy dùng chức năng Rời nhóm.");
+        }
+
+        // Tìm thành viên cần xóa trong nhóm
+        List<Participants> currentMembers = participantRepository.findAllByConversation(conversation);
+
+        List<Participants> targetsToDelete = currentMembers.stream()
+                .filter(p -> memberIdsToRemove.contains(p.getAccount().getAccountId()))
+                .collect(Collectors.toList());
+
+        if (targetsToDelete.isEmpty()) {
+            throw new RuntimeException("Không tìm thấy thành viên nào hợp lệ trong danh sách gửi lên để xóa.");
+        }
+
+        // Thực hiện xóa hàng loạt
+        participantRepository.deleteAll(targetsToDelete);
+
+        // Load lại dữ liệu mới nhất để trả về
+        Conversation updatedConversation = conversationRepository
+                .findByIdWithParticipants(conversationId)
+                .orElseThrow(() -> new RuntimeException("Lỗi tải lại dữ liệu sau khi xóa thành viên"));
+
+        return mapToDTO(updatedConversation);
+    }
     // Đổi tên nhóm
     @Override
     @Transactional

@@ -59,7 +59,7 @@ public class ForgotService {
         return toDTO(forgotPasswordRepository.save(newForgot));
     }
 
-
+// sau khi sửa theo bạn thì tôi lại cứ bắt tôi phải có jwt mà sau khi có r để thay đổi mật khẩu thì nó lại không tìm thấy và in ra log như duwosi đây, bạn hãy xem lỗi ở đâu
 //    @Transactional
 //    public ForgotPasswordDTO getForgotPasswordById(Integer id) {
 //        ForgotPassword entity = forgotPasswordRepository.findById(id)
@@ -91,11 +91,20 @@ public class ForgotService {
 //    }
 
     @Transactional
-    public void deleteForgotPassword(Integer id) {
-        if (!forgotPasswordRepository.existsById(id)) {
-            throw new RuntimeException("ForgotPassword not found with ID: " + id);
+    public void deleteForgotPassword(Integer accountId) {
+        // Tìm Account dựa trên ID được truyền vào
+        Account account = accountRepository.findById(accountId)
+                .orElseThrow(() -> new RuntimeException("Account not found with ID: " + accountId));
+
+        // Tìm bản ghi ForgotPassword gắn với Account đó
+        Optional<ForgotPassword> forgotOptional = forgotPasswordRepository.findByAccount(account);
+
+        // Nếu tìm thấy thì xóa
+        if (forgotOptional.isPresent()) {
+            forgotPasswordRepository.delete(forgotOptional.get());
+        } else {
+            System.out.println("Không tìm thấy OTP nào để xóa cho accountId: " + accountId);
         }
-        forgotPasswordRepository.deleteById(id);
     }
 
     @Transactional
