@@ -9,9 +9,12 @@ import com.bkav.webchat.repository.MessageRepository;
 import com.bkav.webchat.repository.MessageSearchRepository;
 import com.bkav.webchat.repository.ParticipationRepository;
 import com.bkav.webchat.service.FirebasePushService;
+import lombok.extern.slf4j.Slf4j;
+import org.apache.juli.logging.Log;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.kafka.annotation.KafkaListener;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
+import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDateTime;
@@ -19,6 +22,7 @@ import java.time.ZoneId;
 import java.util.*;
 import java.util.stream.Collectors;
 
+@Slf4j
 @Service
 public class ChatKafkaConsumer {
 
@@ -63,7 +67,7 @@ public class ChatKafkaConsumer {
                     if (event.getMessageData() != null) {
                         MessageDocument doc = toDocument(event.getMessageData());
 
-                        // SỬA ĐOẠN NÀY: Hứng kết quả trả về từ hàm save
+                        //Hứng kết quả trả về từ hàm save
                         MessageDocument savedDoc = messageSearchRepository.save(doc);
 
                         System.out.println("======== DEBUG ELASTICSEARCH ========");
@@ -177,7 +181,63 @@ public class ChatKafkaConsumer {
             e.printStackTrace();
         }
     }
-
+//@Async("pushNotificationTaskExecutor") // Chạy ở thread pool riêng
+//public void handlePushNotification(KafkaMessageEvent event) {
+//    try {
+//        MessageResponseDTO msg = event.getMessageData();
+//        if (msg == null) return;
+//
+//        // 1. Lấy thông tin rút gọn (Chỉ ID và Username)
+//        List<ParticipationRepository.UserPushInfo> recipients = participationRepository.findUserInfosForPush(msg.getConversationId(), msg.getSenderId());
+//        if (recipients.isEmpty()) return;
+//
+//        // 2. Lọc nhanh người Online bằng Redis (Batch)
+//        List<String> allUsernames = recipients.stream().map(ParticipationRepository.UserPushInfo::getUsername).toList();
+//        List<String> onlineUsernames = redisService.getOnlineUsers(allUsernames);
+//
+//        // Danh sách những người thực sự cần xử lý Push (đang Offline)
+//        List<Integer> offlineIds = recipients.stream()
+//                .filter(r -> !onlineUsernames.contains(r.getUsername()))
+//                .map(ParticipationRepository.UserPushInfo::getAccountId)
+//                .toList();
+//
+//        if (offlineIds.isEmpty()) return;
+//
+//        // 3. Sử dụng Pipeline để xử lý Unread/Cooldown hàng loạt (Thay vì chạy vòng lặp gọi Redis nhiều lần)
+//        // Hàm này trả về Map: UserId -> Số lượng tin chưa đọc
+//        Map<Integer, Long> pushCandidates = redisService.batchProcessUnreadAndCooldown(offlineIds, 2);
+//
+//        // 4. Gom nhóm để gửi Batch tới Firebase
+//        List<Integer> groupSendDetail = new ArrayList<>();
+//        Map<Long, List<Integer>> summaryGroups = new HashMap<>();
+//
+//        pushCandidates.forEach((userId, unreadCount) -> {
+//            if (unreadCount == 1) {
+//                groupSendDetail.add(userId);
+//            } else {
+//                summaryGroups.computeIfAbsent(unreadCount, k -> new ArrayList<>()).add(userId);
+//            }
+//        });
+//
+//        // 5. Gửi thông báo theo lô (Batch Send)
+//        String senderName = accountRepository.findDisplayNameById(msg.getSenderId());
+//
+//        // Gửi chi tiết
+//        if (!groupSendDetail.isEmpty()) {
+//            firebasePushService.sendNotificationToGroup(groupSendDetail, (long)msg.getConversationId(), senderName, msg.getContent());
+//            System.out.println(">>> Đã GỬI CHI TIẾT tới các ID: " + groupSendDetail);
+//        }
+//
+//        // Gửi tổng hợp (như "Bạn có 5 tin nhắn mới")
+//        summaryGroups.forEach((count, users) -> {
+//            firebasePushService.sendNotificationToGroup(users, (long)msg.getConversationId(), "Thông báo mới", "Có " + count + " tin nhắn chưa đọc");
+//            System.out.println(">>> Đã GỬI TỔNG HỢP (" + count + " tin) tới các ID: " + users);
+//        });
+//
+//    } catch (Exception e) {
+//        log.error("Lỗi xử lý Push Notification bất đồng bộ: ", e);
+//    }
+//}
     private MessageDocument toDocument(MessageResponseDTO dto) {
         LocalDateTime localDateTime = LocalDateTime.parse(dto.getCreatedAt());
 

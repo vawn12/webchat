@@ -2,12 +2,17 @@ package com.bkav.webchat.cache;
 
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Bean;
+import org.springframework.data.redis.connection.RedisStringCommands;
+import org.springframework.data.redis.core.RedisCallback;
 import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.data.redis.core.StringRedisTemplate;
+import org.springframework.data.redis.core.types.Expiration;
 import org.springframework.stereotype.Service;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
@@ -121,6 +126,52 @@ public class RedisService {
     // Force Offline (Để test gửi thông báo ngay cả khi đang bật socket)
     public void forceOffline(String username) {
         redisTemplate.delete("ONLINE:" + username);
+    }
+
+    /**
+     * Xử lý hàng loạt Unread và Cooldown bằng Pipeline
+     * @return Map chứa UserId và số lượng tin chưa đọc (Chỉ dành cho những User được phép Push)
+     */
+    public Map<Integer, Long> batchProcessUnreadAndCooldown(List<Integer> userIds, int cooldownMinutes) {
+        // Mỗi User có 2 lệnh (INCR và SET NX), kết quả trả về là một List phẳng
+        List<Object> results = redisTemplate.executePipelined((RedisCallback<Object>) connection -> {
+            for (Integer userId : userIds) {
+                byte[] unreadKey = ("unread:" + userId).getBytes();
+                byte[] cooldownKey = ("push_cd:" + userId).getBytes();
+
+                // Lệnh 1: Tăng số tin chưa đọc
+                connection.incr(unreadKey);
+
+                // Lệnh 2: Thử tạo key Cooldown (Chỉ thành công nếu key chưa có - NX)
+                // Nếu thành công, set thời gian hết hạn là cooldownMinutes
+                connection.set(cooldownKey, "true".getBytes(),
+                        Expiration.from(cooldownMinutes, TimeUnit.MINUTES),
+                        RedisStringCommands.SetOption.ifAbsent());
+            }
+            return null;
+        });
+
+        Map<Integer, Long> pushCandidates = new HashMap<>();
+
+        // Duyệt qua kết quả Pipeline (Cứ 2 phần tử liên tiếp là kết quả của 1 User)
+        for (int i = 0; i < userIds.size(); i++) {
+            int userId = userIds.get(i);
+
+            // Kết quả của lệnh INCR (vị trí 2i)
+            Long currentUnread = (Long) results.get(i * 2);
+
+            // Kết quả của lệnh SET NX (vị trí 2i + 1)
+            // Nếu Boolean là true: Vừa set thành công -> Cho phép Push
+            // Nếu là null hoặc false: Đang trong thời gian cooldown -> Không Push
+            Object setNxResult = results.get(i * 2 + 1);
+            Boolean canPush = (setNxResult instanceof Boolean) ? (Boolean) setNxResult : false;
+
+            if (canPush) {
+                pushCandidates.put(userId, currentUnread);
+            }
+        }
+
+        return pushCandidates;
     }
 
 }

@@ -190,12 +190,19 @@ public class AuthServiceImpl implements AuthService {
 
     //LOGOUT
     @Override
-    public ResponseEntity<ApiResponse<?>> logout(String refreshToken) {
+    public ResponseEntity<ApiResponse<?>> logout(LogoutRequest request) {
+        String fcmToken = request.getFcmToken();
+        String refreshToken=request.getRefreshToken();
         if (refreshToken == null || refreshToken.isEmpty()) {
             return ResponseEntity.status(HttpStatus.BAD_REQUEST)
                     .body(ApiResponse.fail("Refresh token không được để trống."));
         }
-
+        if (fcmToken != null && !fcmToken.isEmpty()) {
+            userDeviceTokenRepository.findByToken(fcmToken)
+                    .ifPresent(tokenEntity -> {
+                        userDeviceTokenRepository.delete(tokenEntity);
+                    });
+        }
         // Kiểm tra token có tồn tại trong Redis không
         if (!redisService.isTokenValid(refreshToken)) {
             return ResponseEntity.status(HttpStatus.BAD_REQUEST)
@@ -419,6 +426,8 @@ public class AuthServiceImpl implements AuthService {
             userDeviceTokenRepository.save(newToken);
         }
     }
+// AuthServiceImpl.java
+
 
     private String generateOtp() {
         Random rand = new Random();

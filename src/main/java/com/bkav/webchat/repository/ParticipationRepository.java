@@ -47,4 +47,15 @@ public interface ParticipationRepository extends JpaRepository<Participants, Lon
     );
     @Query("SELECT p.conversation FROM Participants p WHERE p.account.accountId = :accountId AND p.conversation.type = 'GROUP'")
     List<Conversation> findConversationsByAccountId(@Param("accountId") Integer accountId);
+    // Trong ParticipationRepository.java
+    @Query("SELECT a.accountId as accountId, a.username as username FROM Account a " +
+            "JOIN Participants p ON a.accountId = p.account.accountId " +
+            "WHERE p.conversation.conversationId = :convId AND a.accountId != :senderId")
+    List<UserPushInfo> findUserInfosForPush(Integer convId, Integer senderId);
+
+    // Interface Projection để lấy dữ liệu nhanh
+    public interface UserPushInfo {
+        Integer getAccountId();
+        String getUsername();
+    }
 }

@@ -24,4 +24,6 @@ public interface AccountRepository extends JpaRepository<Account,Integer> {
     List<Account> searchAccounts(@Param("keyword") String keyword);
     boolean existsByUsername(String username);
     Account findByAccountId(Integer accountId);
+    @Query("SELECT a.displayName FROM Account a WHERE a.accountId = :id")
+    String findDisplayNameById(@Param("id") Integer id);
 }
