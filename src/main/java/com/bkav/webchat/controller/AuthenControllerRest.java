@@ -1,9 +1,6 @@
 package com.bkav.webchat.controller;
 
-import com.bkav.webchat.dto.request.ForgotRequest;
-import com.bkav.webchat.dto.request.LoginRequest;
-import com.bkav.webchat.dto.request.RegisterRequest;
-import com.bkav.webchat.dto.request.ResetPasswordRequest;
+import com.bkav.webchat.dto.request.*;
 import com.bkav.webchat.dto.response.ApiResponse;
 import com.bkav.webchat.service.AuthService;
 
@@ -71,9 +68,8 @@ public class AuthenControllerRest {
     }
 
     @PostMapping("/logout")
-    public ResponseEntity<ApiResponse<?>> logout(@RequestBody Map<String , String > body) {
-        String refreshtoken = body.get("refreshToken");
-        return authService.logout(refreshtoken);
+    public ResponseEntity<ApiResponse<?>> logout(@RequestBody LogoutRequest request) {
+        return authService.logout(request);
     }
     @PostMapping("/refresh")
     public ResponseEntity<ApiResponse<?>> refreshToken(@RequestBody Map<String, String> body) {
