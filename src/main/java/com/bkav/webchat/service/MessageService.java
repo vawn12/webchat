@@ -9,6 +9,8 @@ import org.springframework.web.multipart.MultipartFile;
 
 import java.util.List;
 
+import org.springframework.data.domain.Page;
+
 public interface MessageService {
     ApiResponse<MessageResponseDTO> sendMessage(Integer conversationId, ChatMessageRequest request, String username);
     ApiResponse<MessageResponseDTO> updateMessage(Integer conversationId, ChatMessageRequest request,String username);
@@ -17,4 +19,5 @@ public interface MessageService {
     ApiResponse<MessageResponseDTO> uploadAttachment(Integer conversationId, MultipartFile file, String username);
     ApiResponse<List<MessageDocument>> searchMessages(String query, String username);
     ApiResponse<Void> markAsRead(Integer conversationId, String username);
+    ApiResponse<Page<MessageResponseDTO>> getMessagesByConversation(Integer conversationId, int page, int size, String username);
 }

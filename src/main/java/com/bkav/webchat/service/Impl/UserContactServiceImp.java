@@ -1,5 +1,6 @@
 package com.bkav.webchat.service.Impl;
 
+import com.bkav.webchat.dto.response.ContactResponse;
 import com.bkav.webchat.dto.response.ContactResponseDTO;
 import com.bkav.webchat.entity.*;
 import com.bkav.webchat.enumtype.ConversationType;
@@ -7,6 +8,7 @@ import com.bkav.webchat.repository.ConversationRepository;
 import com.bkav.webchat.repository.MessageRepository;
 import com.bkav.webchat.repository.UserContactRepository;
 import com.bkav.webchat.service.AccountService;
+import com.bkav.webchat.service.MessageService;
 import com.bkav.webchat.service.UserContactService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.domain.Page;
@@ -88,6 +90,22 @@ public class UserContactServiceImp implements UserContactService {
                 .lastMessage(lastMsg != null ? lastMsg.getContent() : null)
                 .lastMessageAt(lastMsg != null ? lastMsg.getCreatedAt() : uc.getCreatedAt())
                 .build();
+    }
+
+    private ContactResponse mapPrivateDTO(UserContact uc){
+        Account fr = uc.getContactUser();
+        Conversation conv=conversationRepository.findPrivateConversationBetween(uc.getOwner().getAccountId(),fr.getAccountId());
+        Message lastMsg =null;
+        if(conv != null)
+            lastMsg=messageRepository.findTopByConversation_ConversationIdOrderByCreatedAtDesc(conv.getConversationId());
+        return ContactResponse.builder()
+                .id(conv !=null ? conv.getConversationId() : uc.getContactId())
+                .file(lastMsg.getMessageType())
+                .image(lastMsg.getMessageType())
+                .fullName(fr.getDisplayName())
+                .userName(fr.getUsername()).build();
+
+
     }
     // Tìm kiếm nguoi liên hệ
     // Sửa lại signature của hàm để nhận thêm username

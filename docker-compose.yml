@@ -2,7 +2,7 @@ version: '3.8'
 services:
   db:
     
-    image: pg-partman-image
+    image: postgres:16-alpine
     # Hoặc nếu muốn build lại mỗi lần chạy thì bỏ dòng 'image' và dùng dòng 'build':
     # build: .
     container_name: pg_chat
@@ -43,14 +43,14 @@ services:
     ports:
       - "6379:6379"
 
-    app:
+  app:
         build: . # Hoặc image
         ports:
         - "8081:8081"
-    depends_on:
-       - db
-       - kafka
-       - redis
-    environment:
-       SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka:9092
-       SPRING_DATA_REDIS_HOST: redis
+        depends_on:
+        - db
+        - kafka
+        - redis
+        environment:
+          SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+          SPRING_DATA_REDIS_HOST: redis
