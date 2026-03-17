@@ -1,8 +1,12 @@
 package com.bkav.webchat.service.Impl;
 
+import com.bkav.webchat.dto.m.FriendSearchDTO;
+import com.bkav.webchat.dto.response.ContactResponse;
 import com.bkav.webchat.dto.response.ContactResponseDTO;
+import com.bkav.webchat.dto.response.SearchFriendResponse;
 import com.bkav.webchat.entity.*;
 import com.bkav.webchat.enumtype.ConversationType;
+import com.bkav.webchat.repository.AttachmentRepository;
 import com.bkav.webchat.repository.ConversationRepository;
 import com.bkav.webchat.repository.MessageRepository;
 import com.bkav.webchat.repository.UserContactRepository;
@@ -14,10 +18,8 @@ import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
 
-import java.util.ArrayList;
-import java.util.Comparator;
-import java.util.List;
-import java.util.Optional;
+import java.time.LocalDateTime;
+import java.util.*;
 import java.util.stream.Collectors;
 
 @Service
@@ -30,6 +32,9 @@ public class UserContactServiceImp implements UserContactService {
     private ConversationRepository conversationRepository;
     @Autowired
     private MessageRepository messageRepository;
+    @Autowired
+    private AttachmentRepository attachmentRepository;
+
     // Lấy danh sách tất cả liên lạc
     public Page<ContactResponseDTO> getAllContacts(int page, int size) {
         List<ContactResponseDTO> allContacts = new ArrayList<>();
@@ -89,6 +94,8 @@ public class UserContactServiceImp implements UserContactService {
                 .lastMessageAt(lastMsg != null ? lastMsg.getCreatedAt() : uc.getCreatedAt())
                 .build();
     }
+
+
     // Tìm kiếm nguoi liên hệ
     // Sửa lại signature của hàm để nhận thêm username
     public Page<ContactResponseDTO> searchContacts(String keyword, int page, int size, String username) {
@@ -139,4 +146,90 @@ public class UserContactServiceImp implements UserContactService {
         return new PageImpl<>(paged, PageRequest.of(page, size), results.size());
     }
 
-}
+
+    public Map<String, Object> searchFriendsSpecific(String keyword, int page, int size, String username) {
+        // Lấy thông tin người đang thực hiện tìm kiếm
+        Account currentUser = accountService.getAccountEntityByUsername(username);
+        if (currentUser == null) {
+            Map<String, Object> errorRes = new HashMap<>();
+            errorRes.put("status", 0);
+            return errorRes;
+        }
+
+        // Tìm tất cả người dùng khớp từ khóa
+        List<Account> accounts = accountService.findByKeyword(keyword);
+        List<Map<String, Object>> friendList = new ArrayList<>();
+
+        for (Account account : accounts) {
+            if (account.getAccountId().equals(currentUser.getAccountId())) {
+                continue;
+            }
+
+            // Tìm Conversation giữa CurrentUser và Account này để lấy tin nhắn cuối
+            Conversation privateConv = conversationRepository.findPrivateConversationBetween(
+                    currentUser.getAccountId(), account.getAccountId());
+            List<String> fileUrls = new ArrayList<>();
+            List<String> imageUrls = new ArrayList<>();
+            Message lastMsg = null;
+            if (privateConv != null) {
+                lastMsg = messageRepository.findTopByConversation_ConversationIdOrderByCreatedAtDesc(
+                        privateConv.getConversationId());
+                if (lastMsg != null) {
+                    // Truy vấn tất cả attachment của tin nhắn này
+                    List<Attachment> attachments = attachmentRepository.findByMessage(lastMsg);
+
+                    for (Attachment att : attachments) {
+                        // Phân loại dựa trên fileType (image/... hoặc khác)
+                        if (att.getFileType() != null && att.getFileType().startsWith("image/")) {
+                            imageUrls.add(att.getFileUrl());
+                        } else {
+                            fileUrls.add(att.getFileUrl());
+
+                        }
+                    }
+                }
+            }
+
+                // Tạo Map object cho từng friend
+                Map<String, Object> friendItem = new HashMap<>();
+                friendItem.put("Content", lastMsg != null ? lastMsg.getContent() : "");
+                friendItem.put("Files", fileUrls.isEmpty() ? null : fileUrls);
+                friendItem.put("Images", imageUrls.isEmpty() ? null : imageUrls);
+                friendItem.put("CreatedAt", lastMsg != null ? lastMsg.getCreatedAt() : null);
+                friendItem.put("FriendID", account.getAccountId());
+                friendItem.put("FullName", account.getDisplayName());
+                friendItem.put("Username", account.getUsername());
+                friendItem.put("unreadCount", 0);
+                friendItem.put("UpdateAtUser", LocalDateTime.now());
+
+                friendList.add(friendItem);
+            }
+
+            // Sắp xếp theo thời gian tin nhắn mới nhất
+            friendList.sort((a, b) -> {
+                java.time.LocalDateTime timeA = (java.time.LocalDateTime) a.get("CreatedAt");
+                java.time.LocalDateTime timeB = (java.time.LocalDateTime) b.get("CreatedAt");
+                if (timeA == null) return 1;
+                if (timeB == null) return -1;
+                return timeB.compareTo(timeA);
+            });
+
+            // Thực hiện phân trang
+            int totalElements = friendList.size();
+            int start = Math.min(page * size, totalElements);
+            int end = Math.min(start + size, totalElements);
+            List<Map<String, Object>> pagedResults = friendList.subList(start, end);
+
+
+            Map<String, Object> response = new HashMap<>();
+            response.put("status", 1);
+
+            Map<String, Object> data = new HashMap<>();
+            data.put("friends", pagedResults);
+            data.put("totalElements", totalElements);
+            response.put("data", data);
+
+            return response;
+        }
+    }
+

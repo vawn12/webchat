@@ -9,6 +9,8 @@ import com.bkav.webchat.service.MessageService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
@@ -85,17 +87,15 @@ public class ChatController {
         return ResponseEntity.ok(response);
     }
 
-    @GetMapping("/search")
-    public ResponseEntity<ApiResponse<List<MessageDocument>>> searchMessages(
-            @RequestParam("q") String query,
-            Principal principal
-    ) {
+    @GetMapping("/{conversationId}/search")
+    public ResponseEntity<ApiResponse<List<MessageDocument>>> searchInConversation(
+            @PathVariable Integer conversationId,
+            @RequestParam("q") String query) {
 
-        ApiResponse<List<MessageDocument>> response = messageService.searchMessages(query, principal.getName());
+        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+        String username = authentication.getName();
 
-        if (!response.isSuccess()) {
-            return ResponseEntity.badRequest().body(response);
-        }
+        ApiResponse<List<MessageDocument>> response = messageService.searchMessages(conversationId, query, username);
         return ResponseEntity.ok(response);
     }
     @PostMapping("/mark-read/{conversationId}")

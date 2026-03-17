@@ -52,10 +52,11 @@ public interface ParticipationRepository extends JpaRepository<Participants, Lon
             "JOIN Participants p ON a.accountId = p.account.accountId " +
             "WHERE p.conversation.conversationId = :convId AND a.accountId != :senderId")
     List<UserPushInfo> findUserInfosForPush(Integer convId, Integer senderId);
-
+    Boolean existsByConversation_ConversationIdAndAccount_AccountId(Integer conversationId, Integer accountId);
     // Interface Projection để lấy dữ liệu nhanh
     public interface UserPushInfo {
         Integer getAccountId();
         String getUsername();
     }
+
 }

@@ -500,8 +500,57 @@ public class MessageServiceImpl implements MessageService {
     }
 
     // Tìm kiếm tin nhắn bằng elasticsearch
+//    @Override
+//    public ApiResponse<List<MessageDocument>> searchMessages(String query, String username) {
+//        // Lấy thông tin người dùng hiện tại
+//        Account currentUser = accountService.getAccountEntityByUsername(username);
+//        if (currentUser == null) {
+//            return ApiResponse.fail("Không tìm thấy người dùng.");
+//        }
+//        Integer currentUserId = currentUser.getAccountId();
+//
+//        // Tạo một Set để chứa tất cả ID cuộc trò chuyện
+//        Set<Integer> allConversationIds = new HashSet<>();
+//
+//        // LẤY ID CỦA CÁC NHÓM CHAT
+//        List<Integer> groupIds = participationRepository
+//                .findAllByAccount_AccountId(currentUserId)
+//                .stream()
+//                .map(participant -> participant.getConversation().getConversationId())
+//                .collect(Collectors.toList());
+//        allConversationIds.addAll(groupIds);
+//
+//        // Lấy danh sách bạn bè đã accept
+//        List<UserContact> contacts = userContactRepository.findAllAcceptedByAccountId(currentUserId);
+//
+//        for (UserContact contact : contacts) {
+//            // Với mỗi người bạn, tìm xem đã có cuộc trò chuyện private chưa
+//            Conversation privateConv = conversationRepository.findPrivateConversationBetween(
+//                    currentUserId,
+//                    contact.getContactUser().getAccountId()
+//            );
+//
+//            if (privateConv != null) {
+//                allConversationIds.add(privateConv.getConversationId());
+//            }
+//        }
+//
+//        //Nếu không thì trả về rỗng
+//        if (allConversationIds.isEmpty()) {
+//            return ApiResponse.success("Không tìm thấy kết quả.", List.of());
+//        }
+//        // Tìm kiếm trong Elasticsearch với danh sách ID tổng hợp
+//        List<MessageDocument> results = messageSearchRepository
+//                .findByContentContainingAndConversationIdInAndMessageTypeNot(
+//                        query,
+//                        new ArrayList<>(allConversationIds),
+//                        String.valueOf(Message_Status.recalled)
+//                );
+//        return ApiResponse.success("Tìm thấy " + results.size() + " kết quả.", results);
+//    }
+// Tìm kiếm tin nhắn trong một cuộc trò chuyện cụ thể bằng Elasticsearch
     @Override
-    public ApiResponse<List<MessageDocument>> searchMessages(String query, String username) {
+    public ApiResponse<List<MessageDocument>> searchMessages(Integer conversationId, String query, String username) {
         // Lấy thông tin người dùng hiện tại
         Account currentUser = accountService.getAccountEntityByUsername(username);
         if (currentUser == null) {
@@ -509,46 +558,30 @@ public class MessageServiceImpl implements MessageService {
         }
         Integer currentUserId = currentUser.getAccountId();
 
-        // Tạo một Set để chứa tất cả ID cuộc trò chuyện
-        Set<Integer> allConversationIds = new HashSet<>();
+        // Kiểm tra xem người dùng có tham gia cuộc trò chuyện này không
+        boolean isParticipant = participationRepository.existsByConversation_ConversationIdAndAccount_AccountId(conversationId, currentUserId);
 
-        // LẤY ID CỦA CÁC NHÓM CHAT
-        List<Integer> groupIds = participationRepository
-                .findAllByAccount_AccountId(currentUserId)
-                .stream()
-                .map(participant -> participant.getConversation().getConversationId())
-                .collect(Collectors.toList());
-        allConversationIds.addAll(groupIds);
-
-        // Lấy danh sách bạn bè đã accept
-        List<UserContact> contacts = userContactRepository.findAllAcceptedByAccountId(currentUserId);
-
-        for (UserContact contact : contacts) {
-            // Với mỗi người bạn, tìm xem đã có cuộc trò chuyện private chưa
-            Conversation privateConv = conversationRepository.findPrivateConversationBetween(
-                    currentUserId,
-                    contact.getContactUser().getAccountId()
-            );
-
-            if (privateConv != null) {
-                allConversationIds.add(privateConv.getConversationId());
+        // Nếu không có trong bảng Participation, kiểm tra xem có phải là cuộc trò chuyện Private không
+        if (!isParticipant) {
+            // Tìm cuộc trò chuyện để kiểm tra xem nó có tồn tại không
+            Conversation conversation = conversationRepository.findById(conversationId).orElse(null);
+            if (conversation == null) {
+                return ApiResponse.fail("Không tìm thấy cuộc trò chuyện.");
             }
+
+            // không lưu đủ record cho cả 2 người trong chat đơn.
         }
 
-        //Nếu không thì trả về rỗng
-        if (allConversationIds.isEmpty()) {
-            return ApiResponse.success("Không tìm thấy kết quả.", List.of());
-        }
-        // Tìm kiếm trong Elasticsearch với danh sách ID tổng hợp
+        // 3. Tìm kiếm trong Elasticsearch chỉ với ID của cuộc trò chuyện này
         List<MessageDocument> results = messageSearchRepository
                 .findByContentContainingAndConversationIdInAndMessageTypeNot(
                         query,
-                        new ArrayList<>(allConversationIds),
-                        String.valueOf(Message_Status.recalled)
+                        List.of(conversationId),
+                        "recalled" //các tin nhắn đã thu hồi
                 );
-        return ApiResponse.success("Tìm thấy " + results.size() + " kết quả.", results);
-    }
 
+        return ApiResponse.success("Tìm thấy " + results.size() + " kết quả trong cuộc trò chuyện này.", results);
+    }
     // Đánh dấu  các tin nhắn đã đọc
     public ApiResponse<Void> markAsRead(Integer conversationId, String username) {
         Account user = accountService.getAccountEntityByUsername(username);

@@ -15,6 +15,7 @@ public interface MessageService {
     ApiResponse<Void> deleteMessage(Integer conversationId, ChatMessageRequest request,String username);
     ApiResponse<String> reactToMessage(Integer conversationId, ReactionRequest request, String username);
     ApiResponse<MessageResponseDTO> uploadAttachment(Integer conversationId, MultipartFile file, String username);
-    ApiResponse<List<MessageDocument>> searchMessages(String query, String username);
+//    ApiResponse<List<MessageDocument>> searchMessages(String query, String username);
     ApiResponse<Void> markAsRead(Integer conversationId, String username);
+    ApiResponse<List<MessageDocument>> searchMessages(Integer conversationId, String query, String username);
 }

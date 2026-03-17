@@ -1,0 +1,179 @@
+CREATE TABLE Account (
+    Account_Id SERIAL PRIMARY KEY,
+    Username VARCHAR(50) NOT NULL UNIQUE,
+    Password_Hash VARCHAR(255) NOT NULL,            -- Mật khẩu mã hóa (BCrypt/Argon2)
+    Email VARCHAR(100) UNIQUE,
+    Display_Name VARCHAR(100),
+    Avatar_Url TEXT,
+    Status VARCHAR(20) DEFAULT 'offline',            -- Trạng thái (online, offline, busy, away...)
+    Created_At TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE Conversation (
+    Conversation_Id SERIAL PRIMARY KEY,
+    Name VARCHAR(100),
+    Type VARCHAR(20) NOT NULL DEFAULT 'private',    -- Loại: 'private' (1-1) hoặc 'group'
+    Created_By INT NOT NULL,
+    Created_At TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (Created_By) REFERENCES Account(Account_Id) ON DELETE CASCADE
+);
+
+CREATE TABLE Message (
+    Message_Id SERIAL PRIMARY KEY,
+    Conversation_Id INT NOT NULL,
+    Sender_Id INT NOT NULL,
+    Content TEXT,
+    Message_Type VARCHAR(20) DEFAULT 'text',
+    Created_At TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    Updated_At TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    Is_Read BOOLEAN DEFAULT FALSE,
+    FOREIGN KEY (Conversation_Id) REFERENCES Conversation(Conversation_Id) ON DELETE CASCADE,
+    FOREIGN KEY (Sender_Id) REFERENCES Account(Account_Id) ON DELETE CASCADE
+);
+
+CREATE TABLE Participants (
+    Conversation_Id INT NOT NULL,
+    Account_Id INT NOT NULL,
+    Role VARCHAR(20) DEFAULT 'member',                -- member, admin, owner
+    Joined_At TIMESTAMP DEFAULT CURRENT_TIMESTAMP,    -- Thời gian tham gia
+    PRIMARY KEY (Conversation_Id, Account_Id),
+    FOREIGN KEY (Conversation_Id) REFERENCES Conversation(Conversation_Id) ON DELETE CASCADE,
+    FOREIGN KEY (Account_Id) REFERENCES Account(Account_Id) ON DELETE CASCADE
+);
+
+CREATE TABLE Attachment (
+    Attachment_Id SERIAL PRIMARY KEY,                 -- ID file đính kèm
+    Message_Id INT NOT NULL,                          -- Gắn vào tin nhắn nào
+    File_Url TEXT NOT NULL,                           -- Link file (local hoặc cloud như S3)
+    File_Type VARCHAR(50),                            -- Loại file: image/png, video/mp4...
+    File_Size BIGINT,                                 -- Kích thước file (bytes)
+    Uploaded_At TIMESTAMP DEFAULT CURRENT_TIMESTAMP,  -- Thời gian upload
+    FOREIGN KEY (Message_Id) REFERENCES Message(Message_Id) ON DELETE CASCADE
+);
+
+CREATE TABLE Message_Status (
+    Message_Id INT NOT NULL,
+    Account_Id INT NOT NULL,
+    Status VARCHAR(20) DEFAULT 'sent',                -- sent, delivered, read
+    Updated_At TIMESTAMP DEFAULT CURRENT_TIMESTAMP,    -- Cập nhật trạng thái
+    PRIMARY KEY (Message_Id, Account_Id),
+    FOREIGN KEY (Message_Id) REFERENCES Message(Message_Id) ON DELETE CASCADE,
+    FOREIGN KEY (Account_Id) REFERENCES Account(Account_Id) ON DELETE CASCADE
+);
+
+CREATE TABLE User_Contact (
+    Contact_Id SERIAL PRIMARY KEY,
+    Owner_Id INT NOT NULL,                            -- User sở hữu danh bạ
+    Contact_User_Id INT NOT NULL,                     -- Người trong danh bạ
+    Status VARCHAR(20) DEFAULT 'pending',             -- pending, accepted, blocked
+    Created_At TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (Owner_Id) REFERENCES Account(Account_Id) ON DELETE CASCADE,
+    FOREIGN KEY (Contact_User_Id) REFERENCES Account(Account_Id) ON DELETE CASCADE,
+    CONSTRAINT Unique_Contact UNIQUE (Owner_Id, Contact_User_Id) -- tránh trùng
+);
+
+CREATE TABLE Notification (
+    Notification_Id SERIAL PRIMARY KEY,
+    Account_Id INT NOT NULL,                          -- Ai nhận thông báo
+    Type VARCHAR(50) NOT NULL,                        -- friend_request, message, system...
+    Content TEXT,                                     -- Nội dung thông báo
+    Is_Read BOOLEAN DEFAULT FALSE,                    -- Đã đọc hay chưa
+    Created_At TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (Account_Id) REFERENCES Account(Account_Id) ON DELETE CASCADE
+);
+CREATE TABLE verify_token (
+    Id           INTEGER GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    Email        VARCHAR(255) NOT NULL UNIQUE,
+    Token        VARCHAR(255) NOT NULL UNIQUE,
+    Expires_at   TIMESTAMP WITHOUT TIME ZONE NOT NULL,
+    Password     VARCHAR(255) NOT NULL,
+    Full_name    VARCHAR(255) NOT NULL
+);
+CREATE TABLE forgot_password (
+    Id         SERIAL PRIMARY KEY,                       -- ID duy nhất
+    Account_Id INT NOT NULL,                             -- Người dùng yêu cầu reset
+    Token      VARCHAR(255) NOT NULL UNIQUE,             -- Mã reset password
+    Expires_At TIMESTAMP WITHOUT TIME ZONE NOT NULL,     -- Hạn sử dụng token
+    FOREIGN KEY (Account_Id) REFERENCES Account(Account_Id) ON DELETE CASCADE
+);
+
+-- STEP 1: Insert data into 'Account' table first, as other tables depend on it.
+-- Mật khẩu đã được mã hóa (chỉ là chuỗi giả định)
+INSERT INTO Account (Username, Password_Hash, Email, Display_Name, Avatar_Url, Status) VALUES
+('alice', '$2b$12$D.U.Rin08xW.9P201tV3OumxT.4aOqES6Y3.JdG.Sg0x9.x1a', 'alice@example.com', 'Alice Wonderland', 'https://i.pravatar.cc/150?u=alice', 'online'),
+('bob', '$2b$12$D.U.Rin08xW.9P201tV3OumxT.4aOqES6Y3.JdG.Sg0x9.x1b', 'bob@example.com', 'Bob The Builder', 'https://i.pravatar.cc/150?u=bob', 'offline'),
+('charlie', '$2b$12$D.U.Rin08xW.9P201tV3OumxT.4aOqES6Y3.JdG.Sg0x9.x1c', 'charlie@example.com', 'Charlie Brown', 'https://i.pravatar.cc/150?u=charlie', 'busy'),
+('david', '$2b$12$D.U.Rin08xW.9P201tV3OumxT.4aOqES6Y3.JdG.Sg0x9.x1d', 'david@example.com', 'David Copperfield', 'https://i.pravatar.cc/150?u=david', 'online');
+
+
+INSERT INTO Conversation (Name, Type, Created_By) VALUES
+(NULL, 'private', 1),                           -- Conversation_Id will be 1
+('Project Phoenix Team', 'group', 1);            -- Conversation_Id will be 2
+
+-- STEP 3: Add participants to the conversations.
+-- This depends on both 'Account' and 'Conversation' tables having data.
+INSERT INTO Participants (Conversation_Id, Account_Id, Role) VALUES
+(1, 1, 'member'),  -- Alice in the private chat
+(1, 2, 'member'),  -- Bob in the private chat
+(2, 1, 'owner'),   -- Alice is owner of the group chat
+(2, 2, 'admin'),   -- Bob is an admin
+(2, 3, 'member');  -- Charlie is a member
+
+-- STEP 4: Add messages to the conversations.
+-- This depends on 'Conversation' and 'Account' (for Sender_Id).
+INSERT INTO Message (Conversation_Id, Sender_Id, Content, Message_Type) VALUES
+(1, 1, 'Chào Bob, bạn khỏe không?', 'text'),         -- Message_Id will be 1
+(1, 2, 'Chào Alice, mình khỏe. Cảm ơn bạn!', 'text'), -- Message_Id will be 2
+(2, 1, 'Chào mừng mọi người đến với nhóm Project Phoenix!', 'text'), -- Message_Id will be 3
+(2, 3, 'Cảm ơn Alice! Rất vui được tham gia.', 'text'),              -- Message_Id will be 4
+(2, 1, 'Đây là bản thiết kế logo mới nhé.', 'media');              -- Message_Id will be 5
+
+-- STEP 5: Add attachments to messages.
+-- This depends on the 'Message' table.
+INSERT INTO Attachment (Message_Id, File_Url, File_Type, File_Size) VALUES
+(5, 'https://example.com/uploads/logo_phoenix_v2.png', 'image/png', 125829);
+
+-- STEP 6: Add statuses for messages.
+-- This depends on 'Message' and 'Account'.
+INSERT INTO Message_Status (Message_Id, Account_Id, Status) VALUES
+(1, 1, 'sent'),      -- Alice's view of her message: sent
+(1, 2, 'read'),      -- Bob's view of Alice's message: read
+(2, 2, 'sent'),      -- Bob's view of his message: sent
+(2, 1, 'delivered'); -- Alice's view of Bob's message: delivered
+
+-- STEP 7: Add contacts (friend relationships).
+-- This only depends on the 'Account' table.
+INSERT INTO User_Contact (Owner_Id, Contact_User_Id, Status) VALUES
+(1, 2, 'accepted'),  -- Alice and Bob are friends
+(2, 1, 'accepted'),  -- This relationship must be two-way
+(1, 3, 'accepted'),  -- Alice and Charlie are friends
+(3, 1, 'accepted'),
+(2, 4, 'pending');   -- Bob sent a friend request to David
+
+-- STEP 8: Add notifications.
+-- This depends on the 'Account' table.
+INSERT INTO Notification (Account_Id, Type, Content) VALUES
+(4, 'friend_request', 'Bob The Builder đã gửi cho bạn một lời mời kết bạn.');
+
+-- STEP 9: Add verification and password reset tokens (optional data).
+INSERT INTO verify_token (Email, Token, Expires_at, Password, Full_name) VALUES
+('newuser@example.com', 'unique_verification_token_string_12345', NOW() + INTERVAL '1 hour', '$2b$12$....(new_password_hash)', 'New User');
+
+INSERT INTO forgot_password (Account_Id, Token, Expires_At) VALUES
+(3, 'unique_reset_token_string_67890', NOW() + INTERVAL '15 minutes');
+
+
+
+
+TRUNCATE TABLE 
+    message_status,
+    attachment,
+    message,
+    participants,
+    conversation,
+    user_contact,
+    notification,
+    verify_token,
+    forgot_password,
+    account
+RESTART IDENTITY CASCADE;

@@ -15,7 +15,7 @@ spec:
     spec:
       containers:
       - name: webchat-container
-        image: vannguyen23/webchat-backend:v14
+        image: vannguyen23/webchat-backend:v17
         ports:
         - containerPort: 8081
         # Cấu hình biến môi trường 

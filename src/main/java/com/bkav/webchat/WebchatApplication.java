@@ -6,6 +6,7 @@ import org.springframework.boot.autoconfigure.domain.EntityScan;
 import org.springframework.scheduling.annotation.EnableAsync;
 import org.springframework.scheduling.annotation.EnableScheduling;
 import org.springframework.transaction.annotation.EnableTransactionManagement;
+import org.springframework.web.socket.config.annotation.EnableWebSocket;
 
 import java.util.TimeZone;
 
@@ -14,6 +15,7 @@ import java.util.TimeZone;
 @EnableTransactionManagement
 @EnableAsync
 @EnableScheduling
+@EnableWebSocket
 public class WebchatApplication {
 
     public static void main(String[] args) {

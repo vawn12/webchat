@@ -24,7 +24,7 @@ public class UserContactController {
 
     @GetMapping("/search")
     public ResponseEntity<Map<String, Object>> searchContacts(
-            @RequestParam String keyword,
+            @RequestParam ("q")String keyword,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "10") int size,
             @RequestHeader("Authorization") String token) {
@@ -42,5 +42,15 @@ public class UserContactController {
 
         return ResponseEntity.ok(response);
     }
+    @GetMapping("search-friend")
+    public ResponseEntity<Map<String, Object>> searchFriends(
+            @RequestParam("q") String keyword,
+            @RequestParam(defaultValue = "0")int page,
+            @RequestParam(defaultValue = "10")int size,
+            @RequestHeader("Authorization") String authorization){
+        String username = jwtService.extractUsername(authorization.substring(7));
+        Map<String, Object> result =userContactService.searchFriendsSpecific(keyword,page,size,username);
+    return ResponseEntity.ok(result);
 
+    }
 }
