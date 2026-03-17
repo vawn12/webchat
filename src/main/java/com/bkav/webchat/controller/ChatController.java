@@ -106,4 +106,21 @@ public class ChatController {
         ApiResponse<Void> response = messageService.markAsRead(conversationId, principal.getName());
         return ResponseEntity.ok(response);
     }
+    
+    @GetMapping("/{conversationId}")
+    public ResponseEntity<ApiResponse<org.springframework.data.domain.Page<MessageResponseDTO>>> getMessagesByConversation(
+            @PathVariable Integer conversationId,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "20") int size,
+            Principal principal
+    ) {
+        ApiResponse<org.springframework.data.domain.Page<MessageResponseDTO>> response = messageService.getMessagesByConversation(
+                conversationId, page, size, principal.getName()
+        );
+
+        if (!response.isSuccess()) {
+            return ResponseEntity.badRequest().body(response);
+        }
+        return ResponseEntity.ok(response);
+    }
 }

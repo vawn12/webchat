@@ -7,8 +7,6 @@ import lombok.NoArgsConstructor;
 
 import java.time.LocalDateTime;
 @Data
-@NoArgsConstructor
-@AllArgsConstructor
 @Builder
 public class ContactResponse {
     private Integer id;
@@ -18,7 +16,6 @@ public class ContactResponse {
     //Thông tin cho bạn bè
     private Integer contactUserId;
     private String userName;
-    private String fullname;
     private String contactUserAvatar;
     private String userStatus;
 

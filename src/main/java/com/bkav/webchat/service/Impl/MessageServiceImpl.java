@@ -499,6 +499,12 @@ public class MessageServiceImpl implements MessageService {
         }
     }
 
+    @Override
+    public ApiResponse<List<MessageDocument>> searchMessages(String query, String username) {
+        return null;
+    }
+
+
     // Tìm kiếm tin nhắn bằng elasticsearch
 //    @Override
 //    public ApiResponse<List<MessageDocument>> searchMessages(String query, String username) {
@@ -549,6 +555,7 @@ public class MessageServiceImpl implements MessageService {
 //        return ApiResponse.success("Tìm thấy " + results.size() + " kết quả.", results);
 //    }
 // Tìm kiếm tin nhắn trong một cuộc trò chuyện cụ thể bằng Elasticsearch
+
     @Override
     public ApiResponse<List<MessageDocument>> searchMessages(Integer conversationId, String query, String username) {
         // Lấy thông tin người dùng hiện tại
@@ -603,5 +610,33 @@ public class MessageServiceImpl implements MessageService {
         redisService.resetUnreadNotification(user.getAccountId());
 
         return ApiResponse.success("Đã đánh dấu đã đọc", null);
+    }
+    
+    // Lấy danh sách tin nhắn của 1 hội thoại
+    @Override
+    public ApiResponse<org.springframework.data.domain.Page<MessageResponseDTO>> getMessagesByConversation(Integer conversationId, int page, int size, String username) {
+        // Kiểm tra xem user có tồn tại không
+        Account user = accountService.getAccountEntityByUsername(username);
+        if (user == null) {
+            return ApiResponse.fail("Không tìm thấy người dùng.");
+        }
+
+        // Kiểm tra sự tồn tại của cuộc trò chuyện
+        Optional<Conversation> optionalConversation = conversationRepository.findById(conversationId);
+        if (optionalConversation.isEmpty()) {
+            return ApiResponse.fail("Không tìm thấy cuộc trò chuyện.");
+        }
+
+        // Kiểm tra user có nằm trong cuộc trò chuyện này không
+        Optional<Participants> participantOpt = participationRepository.findParticipant(conversationId, user.getAccountId());
+        if (participantOpt.isEmpty()) {
+            return ApiResponse.fail("Bạn không có quyền truy cập vào chức năng của cuộc trò chuyện này.");
+        }
+
+        org.springframework.data.domain.Pageable pageable = org.springframework.data.domain.PageRequest.of(page, size);
+        // Lấy danh sách tin nhắn theo ConversationId, xếp mới nhất lên đầu
+        org.springframework.data.domain.Page<Message> messagePage = messageRepository.findByConversation_ConversationIdOrderByCreatedAtDesc(conversationId, pageable);
+        org.springframework.data.domain.Page<MessageResponseDTO> messageDTOPage = messagePage.map(this::toDTO);
+        return ApiResponse.success("Lấy danh sách tin nhắn thành công.", messageDTOPage);
     }
 }

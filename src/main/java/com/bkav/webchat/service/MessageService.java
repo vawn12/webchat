@@ -14,8 +14,8 @@ public interface MessageService {
     ApiResponse<MessageResponseDTO> updateMessage(Integer conversationId, ChatMessageRequest request,String username);
     ApiResponse<Void> deleteMessage(Integer conversationId, ChatMessageRequest request,String username);
     ApiResponse<String> reactToMessage(Integer conversationId, ReactionRequest request, String username);
-    ApiResponse<MessageResponseDTO> uploadAttachment(Integer conversationId, MultipartFile file, String username);
-//    ApiResponse<List<MessageDocument>> searchMessages(String query, String username);
+    ApiResponse<MessageResponseDTO> uploadAttachment(Integer conversationId, MultipartFile file, String username);ApiResponse<List<MessageDocument>> searchMessages(String query, String username);
     ApiResponse<Void> markAsRead(Integer conversationId, String username);
+    ApiResponse<org.springframework.data.domain.Page<MessageResponseDTO>> getMessagesByConversation(Integer conversationId, int page, int size, String username);
     ApiResponse<List<MessageDocument>> searchMessages(Integer conversationId, String query, String username);
 }
