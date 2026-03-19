@@ -15,6 +15,7 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.*;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.kafka.core.KafkaTemplate;
@@ -28,6 +29,7 @@ import java.time.LocalDateTime;
 import java.util.*;
 import java.util.stream.Collectors;
 
+@Slf4j
 @Service
 
 public class MessageServiceImpl implements MessageService {
@@ -127,376 +129,325 @@ public class MessageServiceImpl implements MessageService {
             return ApiResponse.fail("Không tìm thấy cuộc trò chuyện.");
         }
 
-        // Lấy sender từ username
-        var sender = accountService.getAccountEntityByUsername(username);
+        Account sender = accountService.getAccountEntityByUsername(username);
         if (sender == null) {
-            return ApiResponse.fail("Không tìm thấy người gửi .");
+            return ApiResponse.fail("Không tìm thấy người gửi.");
         }
 
-        // Tạo và lưu Message Entity
-        Message message = toEntity(request, optionalConversation.get(), sender);
-        //xử lý reply
-        if (request.getRepliedToMessageId() != null) {
-            Optional<Message> originalMessageOpt = messageRepository.findById(request.getRepliedToMessageId());
+        Message message = createAndSaveMessage(request, optionalConversation.get(), sender, conversationId);
+        saveInitialMessageStatuses(message, sender, request.getReceiverId());
 
-            // reply nếu tin nhắn gốc tồn tại VÀ trong cùng cuộc trò chuyện
-            if (originalMessageOpt.isPresent() &&
-                    originalMessageOpt.get().getConversation().getConversationId().equals(conversationId)) {
-
-                Message originalMessage = originalMessageOpt.get();
-
-                // Tạo đối tượng Map chứa thông tin reply
-                Map<String, Object> replyInfo = Map.of(
-                        "repliedToMessageId", originalMessage.getMessageId(),
-                        "repliedToSenderId", originalMessage.getSender().getAccountId(),
-                        "repliedToSenderName", originalMessage.getSender().getDisplayName(),
-                        "repliedToContent", originalMessage.getContent()
-                );
-
-                // Tạo metadata chính
-                Map<String, Object> metadata = Map.of("replyInfo", replyInfo);
-
-                // Chuyển Map thành chuỗi JSON để lưu vào DB
-                try {
-                    message.setMetadata(objectMapper.writeValueAsString(metadata));
-                } catch (JsonProcessingException e) {
-                    e.printStackTrace();
-                }
-            }
-        }
-        message = messageRepository.save(message);
-
-        // Lưu MessageStatus
-        MessageStatus senderStatus = MessageStatus.builder()
-                .message(message)
-                .account(sender)
-                .status(Message_Status.sent)
-                .updatedAt(LocalDateTime.now())
-                .build();
-        messageStatusRepository.save(senderStatus);
-
-        if (request.getReceiverId() != null) {
-            Account receiver = accountService.getAccountById(request.getReceiverId());
-
-            if (receiver != null) {
-                MessageStatus receiverStatus = MessageStatus.builder()
-                        .message(message)
-                        .account(receiver)
-                        .status(Message_Status.delivered)
-                        .updatedAt(LocalDateTime.now())
-                        .build();
-                messageStatusRepository.save(receiverStatus);
-            }
-        }
-
-        //kafka
         MessageResponseDTO dto = toDTO(message);
+        sendKafkaChatEvent("MESSAGE_SENT", conversationId, dto, null);
 
-        KafkaMessageEvent event = KafkaMessageEvent.builder()
-                .eventType("MESSAGE_SENT")
-                .conversationId(conversationId)
-                .messageData(dto)
-                .build();
-        //lưu
-
-        kafkaTemplate.send(TOPIC_CHAT, String.valueOf(conversationId), event);
-
-        // Trả về kết quả ngay lập tức cho người dùng
         return ApiResponse.success("Gửi tin nhắn thành công.", dto);
     }
-    //update tin nhắn của nguời gửi
-    public ApiResponse<MessageResponseDTO> updateMessage(Integer conversationId, ChatMessageRequest request, String username) {
-        Optional<Conversation> optionalConversation = conversationRepository.findById(conversationId);
-        if (optionalConversation.isEmpty()) {
-            return ApiResponse.fail("Không tìm thấy cuộc trò chuyện.");
-        }
-        if (request.getMessageId() == null) {
-            return ApiResponse.fail("Thiếu messageId trong request.");
-        }
-        Optional<Message> optionalMessage = messageRepository.findById(request.getMessageId());
-        if (optionalMessage.isEmpty()) {
-            return ApiResponse.fail("Không tìm thấy tin nhắn cần cập nhật.");
-        }
-        Message message = optionalMessage.get();
 
-        // Kiểm tra tin nhắn có thuộc cuộc trò chuyện này không
-        if (!message.getConversation().getConversationId().equals(conversationId.intValue())) {
-            return ApiResponse.fail("Tin nhắn không thuộc cuộc trò chuyện này.");
+    private Message createAndSaveMessage(ChatMessageRequest request, Conversation conversation, Account sender, Integer conversationId) {
+        Message message = toEntity(request, conversation, sender);
+        processReplyMetadata(message, request, conversationId);
+        return messageRepository.save(message);
+    }
+
+    private void processReplyMetadata(Message message, ChatMessageRequest request, Integer conversationId) {
+        if (request.getRepliedToMessageId() == null) {
+            return;
         }
 
-        //LOGIC KIỂM TRA QUYỀN
-        Account currentUser = accountService.getAccountEntityByUsername(username);
-        if (currentUser == null) {
-            return ApiResponse.fail("Không tìm thấy thông tin người dùng (user).");
+        messageRepository.findById(request.getRepliedToMessageId())
+                .filter(original -> original.getConversation().getConversationId().equals(conversationId))
+                .ifPresent(original -> {
+                    Map<String, Object> replyInfo = Map.of(
+                            "repliedToMessageId", original.getMessageId(),
+                            "repliedToSenderId", original.getSender().getAccountId(),
+                            "repliedToSenderName", original.getSender().getDisplayName(),
+                            "repliedToContent", original.getContent()
+                    );
+                    try {
+                        message.setMetadata(objectMapper.writeValueAsString(Map.of("replyInfo", replyInfo)));
+                    } catch (JsonProcessingException e) {
+                        log.error("Error serializing reply metadata", e);
+                    }
+                });
+    }
+
+    private void saveInitialMessageStatuses(Message message, Account sender, Integer receiverId) {
+        // Lưu trạng thái cho người gửi
+        messageStatusRepository.save(toMessageStatus(message, sender, Message_Status.sent));
+
+        // Lưu trạng thái cho người nhận (nếu có)
+        if (receiverId != null) {
+            Account receiver = accountService.getAccountById(receiverId);
+            if (receiver != null) {
+                messageStatusRepository.save(toMessageStatus(message, receiver, Message_Status.delivered));
+            }
         }
+    }
 
-        // So sánh ID của người dùng hiện tại với ID của người gửi tin nhắn
-        if (!message.getSender().getAccountId().equals(currentUser.getAccountId())) {
-            return ApiResponse.fail("Bạn không có quyền sửa tin nhắn của người khác.");
-        }
-
-        message.setContent(request.getContent());
-        message.setMessageType(request.getMessageType());
-        message.setUpdatedAt(LocalDateTime.now());
-        Message updated = messageRepository.save(message);
-
-
-        MessageResponseDTO dto = toDTO(updated);
-        Map<String, Object> socketData = Map.of(
-                "messageId", updated.getMessageId(),
-                "senderId", updated.getSender().getAccountId(),
-                "content", updated.getContent(),
-                "messageType", updated.getMessageType(),
-                "updatedAt", updated.getUpdatedAt().toString()
-        );
-
-
+    private void sendKafkaChatEvent(String eventType, Integer conversationId, MessageResponseDTO dto, Map<String, Object> extraData) {
         KafkaMessageEvent event = KafkaMessageEvent.builder()
-                .eventType("MESSAGE_UPDATE")
+                .eventType(eventType)
                 .conversationId(conversationId)
                 .messageData(dto)
-                .extraData(socketData)
+                .extraData(extraData)
                 .build();
-
         kafkaTemplate.send(TOPIC_CHAT, String.valueOf(conversationId), event);
+    }
+    //update tin nhắn của nguời gửi
+    @Override
+    @Transactional
+    public ApiResponse<MessageResponseDTO> updateMessage(Integer conversationId, ChatMessageRequest request, String username) {
+        ApiResponse<Message> validation = validateMessageOwnership(conversationId, request.getMessageId(), username, "cập nhật");
+        if (!validation.isSuccess()) {
+            return ApiResponse.fail(validation.getMessage());
+        }
+
+        Message message = validation.getData();
+        updateMessageContent(message, request);
+        Message updated = messageRepository.save(message);
+
+        MessageResponseDTO dto = toDTO(updated);
+        sendKafkaChatEvent("MESSAGE_UPDATE", conversationId, dto, getUpdateSocketData(updated));
 
         return ApiResponse.success("Cập nhật thành công.", dto);
     }
 
+    private void updateMessageContent(Message message, ChatMessageRequest request) {
+        message.setContent(request.getContent());
+        message.setMessageType(request.getMessageType());
+        message.setUpdatedAt(LocalDateTime.now());
+    }
+
+    private Map<String, Object> getUpdateSocketData(Message message) {
+        return Map.of(
+                "messageId", message.getMessageId(),
+                "senderId", message.getSender().getAccountId(),
+                "content", message.getContent(),
+                "messageType", message.getMessageType(),
+                "updatedAt", message.getUpdatedAt().toString()
+        );
+    }
+
     // XÓA TIN NHẮN
     // Chỉ có thể xóa tin nhắn của mình gửi và không thể xóa tin nhắn của đối phương
+    @Override
     @Transactional
     public ApiResponse<Void> deleteMessage(Integer conversationId, ChatMessageRequest request, String username) {
-        Optional<Conversation> optionalConversation = conversationRepository.findById(conversationId);
-        if (optionalConversation.isEmpty()) {
-            return ApiResponse.fail("Không tìm thấy cuộc trò chuyện.");
+        ApiResponse<Message> validation = validateMessageOwnership(conversationId, request.getMessageId(), username, "xóa");
+        if (!validation.isSuccess()) {
+            return ApiResponse.fail(validation.getMessage());
         }
 
-        if (request.getMessageId() == null) {
-            return ApiResponse.fail("Thiếu messageId trong request.");
-        }
+        Message message = validation.getData();
+        deleteMessageAttachments(message);
+        recallMessage(message);
 
-        Optional<Message> optionalMessage = messageRepository.findById(request.getMessageId());
-        if (optionalMessage.isEmpty()) {
-            return ApiResponse.fail("Không tìm thấy tin nhắn cần xóa.");
-        }
+        Message recalledMessage = messageRepository.save(message);
+        updateMessageStatusesToRecalled(recalledMessage);
 
-        Message message = optionalMessage.get();
-        if (!message.getConversation().getConversationId().equals(conversationId.intValue())) {
-            return ApiResponse.fail("Tin nhắn không thuộc cuộc trò chuyện này.");
-        }
+        sendKafkaChatEvent("MESSAGE_UPDATE", conversationId, toDTO(recalledMessage), getRecallSocketData(recalledMessage));
 
-        // LOGIC KIỂM TRA QUYỀN
-        Account currentUser = accountService.getAccountEntityByUsername(username);
-        if (currentUser == null) {
-            return ApiResponse.fail("Không tìm thấy thông tin người dùng (user).");
-        }
+        return ApiResponse.success("Thu hồi tin nhắn thành công.", null);
+    }
 
-        // So sánh ID của người dùng hiện tại với ID của người gửi tin nhắn
-        if (!message.getSender().getAccountId().equals(currentUser.getAccountId())) {
-            return ApiResponse.fail("Bạn không có quyền xóa tin nhắn của người khác.");
-        }
+    private void deleteMessageAttachments(Message message) {
         List<Attachment> attachments = attachmentRepository.findByMessage(message);
         if (attachments != null && !attachments.isEmpty()) {
             attachmentRepository.deleteAll(attachments);
         }
+    }
 
-        //  Cập nhật nội dung tin nhắn
+    private void recallMessage(Message message) {
         message.setContent("Tin nhắn đã được thu hồi");
         message.setMessageType("recalled");
         message.setUpdatedAt(LocalDateTime.now());
-        // Xóa metadata (nếu là tin reply) để tránh hiển thị trích dẫn cũ
         message.setMetadata(null);
+    }
 
-        Message updatedMessage = messageRepository.save(message);
-
+    private void updateMessageStatusesToRecalled(Message message) {
         List<MessageStatus> statuses = messageStatusRepository.findAllByMessage(message);
         for (MessageStatus status : statuses) {
             status.setStatus(Message_Status.recalled);
             status.setUpdatedAt(LocalDateTime.now());
         }
         messageStatusRepository.saveAll(statuses);
-        MessageResponseDTO dto = toDTO(updatedMessage);
-
-        // Map thêm data để FE xử lý giao diện dễ hơn
-        Map<String, Object> socketData = Map.of(
-                "messageId", updatedMessage.getMessageId(),
-                "content", updatedMessage.getContent(),
-                "messageType", "recalled",
-                "updatedAt", updatedMessage.getUpdatedAt().toString()
-        );
-
-        KafkaMessageEvent event = KafkaMessageEvent.builder()
-                .eventType("MESSAGE_UPDATE") // Dùng UPDATE
-                .conversationId(conversationId)
-                .messageData(dto)
-                .extraData(socketData)
-                .build();
-
-        kafkaTemplate.send(TOPIC_CHAT, String.valueOf(conversationId), event);
-
-        return ApiResponse.success("Thu hồi tin nhắn thành công.", null);
     }
 
-    //thả react cho 1 message
+    private Map<String, Object> getRecallSocketData(Message message) {
+        return Map.of(
+                "messageId", message.getMessageId(),
+                "content", message.getContent(),
+                "messageType", "recalled",
+                "updatedAt", message.getUpdatedAt().toString()
+        );
+    }
 
-    public ApiResponse<String> reactToMessage(Integer conversationId, ReactionRequest request, String username) {
-        if (request.getMessageId() == null || request.getReactionType() == null) {
-            return ApiResponse.fail("Thiếu messageId hoặc type trong request.");
+    private ApiResponse<Message> validateMessageOwnership(Integer conversationId, Integer messageId, String username, String actionName) {
+        if (messageId == null) {
+            return ApiResponse.fail("Thiếu messageId trong request.");
         }
 
-        // 6 loại cảm xúc
-        List<Integer> allowedTypes = List.of(1, 2, 3, 4, 5, 6);
-        if (!allowedTypes.contains(request.getReactionType())) {
-            return ApiResponse.fail("Type không hợp lệ. Chỉ được phép từ 1 đến 6.");
+        Message message = messageRepository.findById(messageId).orElse(null);
+        if (message == null) {
+            return ApiResponse.fail("Không tìm thấy tin nhắn cần " + actionName + ".");
         }
-
-        Optional<Message> optionalMessage = messageRepository.findById(request.getMessageId());
-        if (optionalMessage.isEmpty()) {
-            return ApiResponse.fail("Không tìm thấy tin nhắn.");
-        }
-        Message message = optionalMessage.get();
 
         if (!message.getConversation().getConversationId().equals(conversationId)) {
             return ApiResponse.fail("Tin nhắn không thuộc cuộc trò chuyện này.");
         }
 
+        Account currentUser = accountService.getAccountEntityByUsername(username);
+        if (currentUser == null || !message.getSender().getAccountId().equals(currentUser.getAccountId())) {
+            return ApiResponse.fail("Bạn không có quyền " + actionName + " tin nhắn của người khác.");
+        }
+
+        return ApiResponse.success("Success", message);
+    }
+
+    //thả react cho 1 message
+
+    @Override
+    @Transactional
+    public ApiResponse<String> reactToMessage(Integer conversationId, ReactionRequest request, String username) {
+        ApiResponse<Void> validation = validateReactionRequest(conversationId, request, username);
+        if (!validation.isSuccess()) {
+            return ApiResponse.fail(validation.getMessage());
+        }
+
         Account user = accountService.getAccountEntityByUsername(username);
-        if (user == null) {
+        String action = handleReactionLogic(request, user);
+
+        sendKafkaChatEvent("MESSAGE_REACT", conversationId, null, getReactionSocketData(request.getMessageId(), user.getAccountId(), request.getReactionType(), action));
+
+        return ApiResponse.success("Reaction xử lý thành công (" + action + ").", action);
+    }
+
+    private ApiResponse<Void> validateReactionRequest(Integer conversationId, ReactionRequest request, String username) {
+        if (request.getMessageId() == null || request.getReactionType() == null) {
+            return ApiResponse.fail("Thiếu messageId hoặc type trong request.");
+        }
+
+        List<Integer> allowedTypes = List.of(1, 2, 3, 4, 5, 6);
+        if (!allowedTypes.contains(request.getReactionType())) {
+            return ApiResponse.fail("Type không hợp lệ. Chỉ được phép từ 1 đến 6.");
+        }
+
+        Message message = messageRepository.findById(request.getMessageId()).orElse(null);
+        if (message == null || !message.getConversation().getConversationId().equals(conversationId)) {
+            return ApiResponse.fail("Tin nhắn không hợp lệ.");
+        }
+
+        if (accountService.getAccountEntityByUsername(username) == null) {
             return ApiResponse.fail("Không tìm thấy người dùng.");
         }
 
-        Optional<MessageReaction> existingReaction =
-                messageReactionRepository.findByMessage_MessageIdAndAccount_AccountId(request.getMessageId(), user.getAccountId());
+        return ApiResponse.success("Valid", null);
+    }
 
-        String action;
-        if (existingReaction.isPresent()) {
-            MessageReaction reaction = existingReaction.get();
-            // Nếu click lại cùng type thì xóa reaction
-            if (reaction.getReactionType().equals(request.getReactionType())) {
+    private String handleReactionLogic(ReactionRequest request, Account user) {
+        Optional<MessageReaction> existing = messageReactionRepository.findByMessage_MessageIdAndAccount_AccountId(request.getMessageId(), user.getAccountId());
+
+        if (existing.isPresent()) {
+            MessageReaction reaction = existing.get();
+            if (reaction.getReactionType().equals(String.valueOf(request.getReactionType()))) {
                 messageReactionRepository.delete(reaction);
-                action = "remove";
-            } else {
-                // Nếu khác type → cập nhật type mới
-                reaction.setReactionType(String.valueOf(request.getReactionType()));
-                reaction.setCreatedAt(LocalDateTime.now());
-                messageReactionRepository.save(reaction);
-                action = "update";
+                return "remove";
             }
-        } else {
-            // Tạo mới
-            MessageReaction.MessageReactionId reactionId =
-                    new MessageReaction.MessageReactionId(message.getMessageId(), user.getAccountId());
-            MessageReaction reaction = MessageReaction.builder()
-                    .id(reactionId)
-                    .message(message)
-                    .account(user)
-                    .reactionType(String.valueOf(request.getReactionType()))
-                    .createdAt(LocalDateTime.now())
-                    .build();
+            reaction.setReactionType(String.valueOf(request.getReactionType()));
+            reaction.setCreatedAt(LocalDateTime.now());
             messageReactionRepository.save(reaction);
-            action = "add";
+            return "update";
         }
 
-        Map<String, Object> socketData = Map.of(
-                "messageId", request.getMessageId(),
-                "accountId", user.getAccountId(),
-                "reactionType", request.getReactionType(),
+        Message message = messageRepository.getReferenceById(request.getMessageId());
+        MessageReaction newReaction = MessageReaction.builder()
+                .id(new MessageReaction.MessageReactionId(message.getMessageId(), user.getAccountId()))
+                .message(message)
+                .account(user)
+                .reactionType(String.valueOf(request.getReactionType()))
+                .createdAt(LocalDateTime.now())
+                .build();
+        messageReactionRepository.save(newReaction);
+        return "add";
+    }
+
+    private Map<String, Object> getReactionSocketData(Integer messageId, Integer accountId, Integer type, String action) {
+        return Map.of(
+                "messageId", messageId,
+                "accountId", accountId,
+                "reactionType", type,
                 "action", action
         );
-
-        KafkaMessageEvent event = KafkaMessageEvent.builder()
-                .eventType("MESSAGE_REACT")
-                .conversationId(conversationId)
-                .extraData(socketData) // Dữ liệu reaction
-                .build();
-
-        kafkaTemplate.send(TOPIC_CHAT, String.valueOf(conversationId), event);
-
-        return ApiResponse.success("Reaction xử lý thành công (" + action + ").", action);
-
     }
 
     // Tải các tệp và ảnh lên đoạn chat
+    @Override
+    @Transactional
     public ApiResponse<MessageResponseDTO> uploadAttachment(Integer conversationId, MultipartFile file, String username) {
         try {
-            // Kiểm tra cuộc trò chuyện hợp lệ
             Conversation conversation = conversationRepository.findById(conversationId)
                     .orElseThrow(() -> new RuntimeException("Không tìm thấy cuộc trò chuyện."));
 
             Account sender = accountService.getAccountEntityByUsername(username);
-            if (sender == null) {
-                return ApiResponse.fail("Không tìm thấy người gửi.");
-            }
+            if (sender == null) return ApiResponse.fail("Không tìm thấy người gửi.");
 
-            // Lưu file vật lý
-            String uploadDir = System.getProperty("user.dir") + "/uploads/";
-            File directory = new File(uploadDir);
-            if (!directory.exists()) directory.mkdirs();
+            String storedName = savePhysicalFile(file);
+            Message message = saveAttachmentMessage(conversation, sender, file.getOriginalFilename());
+            saveAttachmentEntity(message, file, storedName);
 
-            String originalName = file.getOriginalFilename();
-            String storedName = System.currentTimeMillis() + "_" + originalName;
-            String filePath = uploadDir + storedName;
-
-            file.transferTo(new File(filePath));
-
-            // Tạo message mới
-            Message message = Message.builder()
-                    .conversation(conversation)
-                    .sender(sender)
-                    .content(originalName)
-                    .messageType("file")
-                    .createdAt(LocalDateTime.now())
-                    .updatedAt(LocalDateTime.now())
-                    .build();
-            messageRepository.save(message);
-
-            // Tạo entity Attachment gắn với message
-            Attachment attachment = Attachment.builder()
-                    .message(message)
-                    .fileUrl("/uploads/" + storedName)
-                    .fileType(file.getContentType())
-                    .fileSize(file.getSize())
-                    .uploadedAt(LocalDateTime.now())
-                    .build();
-            attachmentRepository.save(attachment);
-
-            // DTO phản hồi
-            MessageResponseDTO dto = MessageResponseDTO.builder()
-                    .messageId(message.getMessageId())
-                    .conversationId(conversationId)
-                    .senderId(sender.getAccountId())
-                    .content(originalName)
-                    .messageType("file")
-                    .createdAt(message.getCreatedAt().toString())
-                    .build();
-
-            //Gửi realtime JSON
-            Map<String, Object> socketData = Map.of(
-                    "messageId", message.getMessageId(),
-                    "sender", sender.getDisplayName(),
-                    "fileName", originalName,
-                    "fileUrl", "/uploads/" + storedName,
-                    "fileType", file.getContentType(),
-                    "fileSize", file.getSize(),
-                    "createdAt", message.getCreatedAt().toString()
-            );
-
-            KafkaMessageEvent event = KafkaMessageEvent.builder()
-                    .eventType("FILE_SENT")
-                    .conversationId(conversationId)
-                    .messageData(dto)
-                    .extraData(socketData)
-                    .build();
-
-            kafkaTemplate.send(TOPIC_CHAT, String.valueOf(conversationId), event);
+            MessageResponseDTO dto = toDTO(message);
+            sendKafkaChatEvent("FILE_SENT", conversationId, dto, getFileSocketData(message, sender.getDisplayName(), file, storedName));
 
             return ApiResponse.success("Gửi file thành công.", dto);
-
         } catch (Exception e) {
-            e.printStackTrace();
+            log.error("Lỗi khi tải file", e);
             return ApiResponse.fail("Lỗi khi tải file: " + e.getMessage());
         }
+    }
+
+    private String savePhysicalFile(MultipartFile file) throws Exception {
+        String uploadDir = System.getProperty("user.dir") + "/uploads/";
+        File directory = new File(uploadDir);
+        if (!directory.exists()) directory.mkdirs();
+
+        String storedName = System.currentTimeMillis() + "_" + file.getOriginalFilename();
+        file.transferTo(new File(uploadDir + storedName));
+        return storedName;
+    }
+
+    private Message saveAttachmentMessage(Conversation conversation, Account sender, String fileName) {
+        Message message = Message.builder()
+                .conversation(conversation)
+                .sender(sender)
+                .content(fileName)
+                .messageType("file")
+                .createdAt(LocalDateTime.now())
+                .updatedAt(LocalDateTime.now())
+                .build();
+        return messageRepository.save(message);
+    }
+
+    private void saveAttachmentEntity(Message message, MultipartFile file, String storedName) {
+        Attachment attachment = Attachment.builder()
+                .message(message)
+                .fileUrl("/uploads/" + storedName)
+                .fileType(file.getContentType())
+                .fileSize(file.getSize())
+                .uploadedAt(LocalDateTime.now())
+                .build();
+        attachmentRepository.save(attachment);
+    }
+
+    private Map<String, Object> getFileSocketData(Message message, String senderDisplayName, MultipartFile file, String storedName) {
+        return Map.of(
+                "messageId", message.getMessageId(),
+                "sender", senderDisplayName,
+                "fileName", message.getContent(),
+                "fileUrl", "/uploads/" + storedName,
+                "fileType", file.getContentType(),
+                "fileSize", file.getSize(),
+                "createdAt", message.getCreatedAt().toString()
+        );
     }
 
     @Override
