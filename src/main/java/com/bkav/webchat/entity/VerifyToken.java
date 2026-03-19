@@ -34,4 +34,7 @@ public class VerifyToken {
 
     @Column(name = "FullName", nullable = false)
     private String fullName;
+
+    @Column(name = "Username", nullable = false)
+    private String username;
 }

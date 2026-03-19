@@ -23,6 +23,7 @@ public class VerifyTokenServiceImp implements VerifyTokenService {
                 .expiresAt(entity.getExpiresAt())
                 .password(entity.getPassword())
                 .fullName(entity.getFullName())
+                .username(entity.getUsername())
                 .build();
     }
 
@@ -36,6 +37,7 @@ public class VerifyTokenServiceImp implements VerifyTokenService {
                 .expiresAt(dto.getExpiresAt())
                 .password(dto.getPassword())
                 .fullName(dto.getFullName())
+                .username(dto.getUsername())
                 .build();
     }
     @Transactional
@@ -64,6 +66,7 @@ public class VerifyTokenServiceImp implements VerifyTokenService {
         entity.setExpiresAt(dto.getExpiresAt());
         entity.setPassword(dto.getPassword());
         entity.setFullName(dto.getFullName());
+        entity.setUsername(dto.getUsername());
 
         VerifyToken updated = verifyTokenRepository.save(entity);
         return toDTO(updated);

@@ -83,6 +83,11 @@ public class AuthServiceImpl implements AuthService {
             return ResponseEntity.status(HttpStatus.CONFLICT)
                     .body(ApiResponse.fail("Email đã được đăng ký"));
 
+        if (accountRepository.existsByUsername(request.getUsername())) {
+            return ResponseEntity.status(HttpStatus.CONFLICT)
+                    .body(ApiResponse.fail("Tên đăng nhập đã tồn tại"));
+        }
+
         VerifyTokenDTO oldToken = verifyTokenService.getTokenByEmail(email);
         if (oldToken != null)
             verifyTokenService.deleteTokenByEmail(email);
@@ -93,6 +98,7 @@ public class AuthServiceImpl implements AuthService {
                 .token(token)
                 .expiresAt(new Date(System.currentTimeMillis() + 10 * 60 * 1000))
                 .fullName(request.getFullName())
+                .username(request.getUsername())
                 .password(request.getPassword())
                 .build();
 
@@ -123,9 +129,9 @@ public class AuthServiceImpl implements AuthService {
         }
 
         AccountDTO dto = AccountDTO.builder()
-                .displayName(verifyToken.getEmail().split("@")[0])
+                .displayName(verifyToken.getFullName())
                 .email(verifyToken.getEmail())
-                .username(verifyToken.getFullName())
+                .username(verifyToken.getUsername())
                 .status(Account_status.offline)
                 .build();
 
