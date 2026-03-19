@@ -1,20 +1,16 @@
 package com.bkav.webchat.repository;
 
-
-import jakarta.persistence.EntityManager;
-import jakarta.persistence.PersistenceContext;
+import com.bkav.webchat.entity.Conversation;
+import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
-
 import java.util.List;
 
 @Repository
-public class ChatListRepository {
+public interface ChatListRepository extends JpaRepository<Conversation, Long> { // Thay Object bằng Entity chính của bạn nếu cần
 
-    @PersistenceContext
-    private EntityManager entityManager;
-
-    public List<Object[]> findChatListByUserId(Long userId) {
-        return entityManager.createNativeQuery("""
+    @Query(value = """
             WITH user_convs AS (
                 SELECT p.conversation_id
                 FROM participants p
@@ -49,7 +45,6 @@ public class ChatListRepository {
             JOIN participants p ON p.conversation_id = c.conversation_id
             WHERE p.account_id = :userId
             ORDER BY lm.created_at DESC NULLS LAST
-        """).setParameter("userId", userId)
-                .getResultList();
-    }
+            """, nativeQuery = true)
+    List<Object[]> findChatListByUserId(@Param("userId") Long userId);
 }

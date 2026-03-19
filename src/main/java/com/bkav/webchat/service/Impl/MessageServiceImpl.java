@@ -18,11 +18,13 @@ import lombok.*;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.ApplicationEventPublisher;
+import org.springframework.data.domain.Pageable;
 import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
+import org.springframework.data.domain.Page;
 
 import java.io.File;
 import java.time.LocalDateTime;
@@ -584,10 +586,10 @@ public class MessageServiceImpl implements MessageService {
             return ApiResponse.fail("Bạn không có quyền truy cập vào chức năng của cuộc trò chuyện này.");
         }
 
-        org.springframework.data.domain.Pageable pageable = org.springframework.data.domain.PageRequest.of(page, size);
+        Pageable pageable = org.springframework.data.domain.PageRequest.of(page, size);
         // Lấy danh sách tin nhắn theo ConversationId, xếp mới nhất lên đầu
-        org.springframework.data.domain.Page<Message> messagePage = messageRepository.findByConversation_ConversationIdOrderByCreatedAtDesc(conversationId, pageable);
-        org.springframework.data.domain.Page<MessageResponseDTO> messageDTOPage = messagePage.map(this::toDTO);
+        Page<Message> messagePage = messageRepository.findByConversation_ConversationIdOrderByCreatedAtDesc(conversationId, pageable);
+        Page<MessageResponseDTO> messageDTOPage = messagePage.map(this::toDTO);
         return ApiResponse.success("Lấy danh sách tin nhắn thành công.", messageDTOPage);
     }
 }
